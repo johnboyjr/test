@@ -1,8 +1,8 @@
 {
- "game_folder": "C:\\Users\\john_\\Downloads\\Dance Dance Revolution II (USA) (En,Fr,Es)",
+ "game_folder": "C:\\Users\\john_\\Downloads",
  "pc": {
   "style": "single",
-  "diff": 3,
+  "diff": 2,
   "speed": 2,
   "appearance": "visible",
   "turn": "off",
@@ -21,9 +21,13 @@
   "colors": "rainbow",
   "bindings": null,
   "sort": "game",
+  "game": "hp3",
   "dancer": true,
+  "hpStage": "song",
+  "hpDancer": "004",
   "dancerCustom": false,
   "dancerModel": "",
+  "ddr2Char": "builtin",
   "ngBreaksCombo": false,
   "jump": true,
   "cut": false,
@@ -31,9 +35,27 @@
   "evaluation": true,
   "gameLevel": "medium",
   "freezeGuide": true,
+  "custom": {
+   "select": "ddr2",
+   "arrows": "ddr2",
+   "board": "hp",
+   "hud": "ddr2",
+   "judge": "ddr2",
+   "banners": "ddr2",
+   "stage": "ddr2",
+   "score": "ddr2"
+  },
   "lights": true,
   "lightMap": null,
-  "lastSlot": 23,
-  "colorsV": 2
- }
+  "lastSlot": 3016,
+  "colorsV": 2,
+  "mode": "free",
+  "wkTarget": "kcal",
+  "wkTime": 20,
+  "wkKcal": 100
+ },
+ "ffmpeg": "C:\\Users\\john_\\Downloads\\DDR_Song_Manager (1)\\DDR Song Manager\\ffmpeg.exe",
+ "hp_folder": "C:\\Users\\john_\\Downloads\\Dance Dance Revolution - Hottest Party (USA)",
+ "hp2_folder": "C:\\Users\\john_\\Downloads\\Dance Dance Revolution - Hottest Party 2 (USA)",
+ "hp3_folder": "C:\\Users\\john_\\Downloads\\Dance Dance Revolution - Hottest Party 3 (USA)"
 }

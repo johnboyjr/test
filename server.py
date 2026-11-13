@@ -8,6 +8,14 @@ import json, os, struct, sys, threading, time, traceback, webbrowser, subprocess
 from sfx import SoundIndex
 import dance
 import custom
+import hp
+import hp2
+import hp3
+import hp2stage
+import hpstage
+import hpchar
+import hp2char
+import ddr2char
 from lights import LIGHTS
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, unquote, parse_qs
@@ -119,6 +127,12 @@ class Dol:
 
     def u32(self, va):
         return struct.unpack_from('>I', self.d, self.off(va))[0]
+
+    def va(self, off):
+        for o, a, s in self.secs:
+            if o <= off < o + s:
+                return a + off - o
+        return None
 
     def bytes(self, va, n):
         o = self.off(va)
@@ -480,7 +494,8 @@ class Game:
             fe = self.entry(full)
             tptr = struct.unpack_from('>I', fe, 0)[0]
             name = self.dol.cstr(tptr)
-            if not name or name in ('music',) or name.startswith('lesson'):
+            # (DUMMY_music: a placeholder left on the disc, never shown in the real game)
+            if not name or name in ('music',) or name.startswith('lesson') or 'DUMMY' in name.upper():
                 continue
             # Many Konami songs only exist as the short (cut) version: their full slot has no charts.
             slot = full
@@ -518,8 +533,89 @@ class Game:
 
 
 # ------------------------------------------------------------------ http
-STATE = {'game': None, 'error': None}
+STAGE_CACHE = {}
+STATE = {'game': None, 'error': None, 'hp': None, 'hpError': None, 'hp2': None, 'hp2Error': None, 'hp3': None, 'hp3Error': None}
 LOCK = threading.Lock()
+
+
+def open_hp(path):
+    """the Hottest Party disc (extracted folder): its songs go in their own folder on the song list"""
+    with LOCK:
+        try:
+            STATE['hp'] = hp.HPGame(path, Dol, Rsar)
+            STATE['hpError'] = None
+            s = load_settings()
+            s['hp_folder'] = path
+            s.pop('hp_off', None)
+            save_settings(s)
+            log('Hottest Party folder', path, 'songs', len(STATE['hp'].songs))
+        except Exception as ex:
+            STATE['hp'] = None
+            STATE['hpError'] = str(ex)
+            log('Hottest Party open failed:', ex)
+
+
+def open_hp2(path):
+    """the Hottest Party 2 disc (extracted folder): its songs are the third game's"""
+    with LOCK:
+        try:
+            STATE['hp2'] = hp2.HP2Game(path, Dol, Rsar)
+            STATE['hp2Error'] = None
+            s = load_settings()
+            s['hp2_folder'] = path
+            s.pop('hp2_off', None)
+            save_settings(s)
+            log('Hottest Party 2 folder', path, 'songs', len(STATE['hp2'].songs))
+        except Exception as ex:
+            STATE['hp2'] = None
+            STATE['hp2Error'] = str(ex)
+            log('Hottest Party 2 open failed:', ex)
+
+
+def open_hp3(path):
+    """the Hottest Party 3 disc (extracted folder): its songs are the fourth game's"""
+    with LOCK:
+        try:
+            hp3.Thp = Thp
+            STATE['hp3'] = hp3.HP3Game(path, Dol, Rsar)
+            STATE['hp3Error'] = None
+            s = load_settings()
+            s['hp3_folder'] = path
+            s.pop('hp3_off', None)
+            save_settings(s)
+            log('Hottest Party 3 folder', path, 'songs', len(STATE['hp3'].songs))
+        except Exception as ex:
+            STATE['hp3'] = None
+            STATE['hp3Error'] = str(ex)
+            log('Hottest Party 3 open failed:', ex)
+
+
+def all_songs(g):
+    out = list(g.songs)
+    h = STATE['hp']
+    if h:
+        bgv = g.movie_list('bgv')
+        for i, s in enumerate(h.songs):
+            s = dict(s)
+            if bgv:
+                s['movie'] = {'file': 'bgv/' + bgv[i % len(bgv)], 'sync': False}
+            out.append(s)
+    h2 = STATE['hp2']
+    if h2:
+        bgv = g.movie_list('bgv')
+        for i, s in enumerate(h2.songs):
+            s = dict(s)
+            if bgv:
+                s['movie'] = {'file': 'bgv/' + bgv[(i * 7) % len(bgv)], 'sync': False}
+            out.append(s)
+    h3 = STATE['hp3']
+    if h3:
+        bgv = g.movie_list('bgv')
+        for i, s in enumerate(h3.songs):
+            s = dict(s)
+            s['movie'] = s.pop('movieHP3', None) or ({'file': 'bgv/' + bgv[(i * 5) % len(bgv)], 'sync': False} if bgv else None)
+            out.append(s)
+    return out
 
 
 def open_game(path):
@@ -571,7 +667,73 @@ def setup_status():
     g = STATE['game']
     return {'gameOk': g is not None, 'folder': g.root if g else st.get('game_folder'), 'iso': st.get('iso'),
             'ffmpeg': custom.ffmpeg(), 'ffmpegOk': ffmpeg_ok(), 'ffmpegSkip': bool(st.get('ffmpeg_skip')),
-            'dolphinTool': find_dolphin_tool(), 'busy': SETUP['busy'], 'msg': SETUP['msg'], 'error': STATE['error']}
+            'dolphinTool': find_dolphin_tool(), 'busy': SETUP['busy'], 'msg': SETUP['msg'], 'error': STATE['error'],
+            'hpOk': STATE['hp'] is not None, 'hpFolder': STATE['hp'].root if STATE['hp'] else st.get('hp_folder'),
+            'hpSongs': len(STATE['hp'].songs) if STATE['hp'] else 0, 'hpError': STATE['hpError'],
+            'hp2Ok': STATE['hp2'] is not None, 'hp2Folder': STATE['hp2'].root if STATE['hp2'] else st.get('hp2_folder'),
+            'hp2Songs': len(STATE['hp2'].songs) if STATE['hp2'] else 0, 'hp2Error': STATE['hp2Error'],
+            'hp3Ok': STATE['hp3'] is not None, 'hp3Folder': STATE['hp3'].root if STATE['hp3'] else st.get('hp3_folder'),
+            'hp3Songs': len(STATE['hp3'].songs) if STATE['hp3'] else 0, 'hp3Error': STATE['hp3Error']}
+
+
+HP_FILES = os.path.join(HERE, 'Game Files (Hottest Party)')
+
+
+def use_hp_disc(iso):
+    """Hottest Party disc: same as use_disc - copied out once with DolphinTool, the disc is only read"""
+    for cand in (os.path.dirname(iso), HP_FILES):
+        marker = os.path.join(cand, '.from_disc')
+        same = cand != HP_FILES or (os.path.isfile(marker) and open(marker, encoding='utf-8').read().strip() == iso)
+        if same and hp.find_files(cand):
+            open_hp(cand)
+            SETUP['msg'] = 'Hottest Party added.' if STATE['hp'] else 'That folder could not be read: %s' % STATE['hpError']
+            return
+    tool = find_dolphin_tool()
+    if not tool:
+        SETUP['msg'] = 'DolphinTool.exe was not found. Press D and pick the DolphinTool.exe in your Dolphin folder.'
+        return
+    SETUP['busy'] = True
+    SETUP['msg'] = 'Copying Hottest Party\'s files out of the disc (a few minutes, once only)...'
+
+    def work():
+        try:
+            import shutil
+            if os.path.isdir(HP_FILES):
+                shutil.rmtree(HP_FILES, ignore_errors=True)
+            os.makedirs(HP_FILES, exist_ok=True)
+            flags = 0x08000000 if os.name == 'nt' else 0
+            r = subprocess.run([tool, 'extract', '-i', iso, '-o', HP_FILES, '-g', '-q'],
+                               capture_output=True, text=True, creationflags=flags)
+            if not hp.find_files(HP_FILES):
+                r = subprocess.run([tool, 'extract', '-i', iso, '-o', HP_FILES, '-q'],
+                                   capture_output=True, text=True, creationflags=flags)
+            if not hp.find_files(HP_FILES):
+                SETUP['msg'] = 'Could not copy the files out of that disc. ' + ((r.stderr or r.stdout or '').strip()[:200])
+                return
+            with open(os.path.join(HP_FILES, '.from_disc'), 'w', encoding='utf-8') as f:
+                f.write(iso)
+            open_hp(HP_FILES)
+            SETUP['msg'] = 'Hottest Party added.' if STATE['hp'] else 'The disc was copied but could not be read: %s' % STATE['hpError']
+        except Exception as ex:
+            SETUP['msg'] = 'Copying failed: %s' % ex
+        finally:
+            SETUP['busy'] = False
+    threading.Thread(target=work, daemon=True).start()
+
+
+def disc_kind(path):
+    """'hp' for a Hottest Party disc image, 'ddr2' for DDR II, None if it can't tell (the game ID
+    sits near the start of .iso / .wbfs / .rvz / .wia / .ciso images)"""
+    try:
+        with open(path, 'rb') as f:
+            head = f.read(0x10000)
+    except OSError:
+        return None
+    if re.search(rb'RDD[EPJ]A4', head):
+        return 'hp'
+    if re.search(rb'SURE[A-Z0-9]{2}', head):
+        return 'ddr2'
+    return None
 
 
 def use_disc(iso):
@@ -781,7 +943,7 @@ class H(BaseHTTPRequestHandler):
         if g is None:
             return self.send(409, {'error': 'no game folder'})
         if p == '/api/songs':
-            return self.send(200, g.songs)
+            return self.send(200, all_songs(g))
         if p == '/api/save':
             try:
                 with open(SAVE, encoding='utf-8') as f:
@@ -791,13 +953,19 @@ class H(BaseHTTPRequestHandler):
         if p == '/api/res':
             d = g.res.get(q.get('f', ''), q.get('p', ''))
             return self.send(200, d) if d else self.send(404, {'error': 'no such resource'})
+        def movie_of(f):
+            if f.startswith('hp3:'):
+                if not STATE['hp3']:
+                    raise ValueError('no Hottest Party 3')
+                return STATE['hp3'].movie(f[4:])
+            return g.movie(f)
         if p == '/api/movie/info':
             try:
-                return self.send(200, g.movie(q.get('f', '')).info())
+                return self.send(200, movie_of(q.get('f', '')).info())
             except (OSError, ValueError) as ex:
                 return self.send(404, {'error': str(ex)})
         if p == '/api/movie/frames':
-            m = g.movie(q.get('f', ''))
+            m = movie_of(q.get('f', ''))
             return self.send(200, m.chunk(int(q.get('s', 0)), min(240, int(q.get('n', 30))), q.get('a') == '1'))
         if p == '/api/sfx':
             name = q.get('n', '')
@@ -813,7 +981,7 @@ class H(BaseHTTPRequestHandler):
             path = g.bgm_path(p.rsplit('/', 1)[1])
             return self.send(200, open(path, 'rb').read()) if path else self.send(404, {'error': 'no bgm'})
         if p == '/api/movie/audio':
-            m = g.movie(q.get('f', ''))
+            m = movie_of(q.get('f', ''))
             return self.send(200, m.audio_blocks()) if m.audio else self.send(404, {'error': 'no audio'})
         if p == '/api/custom/songs':
             lib = library()
@@ -836,6 +1004,26 @@ class H(BaseHTTPRequestHandler):
             if not path or not os.path.isfile(path):
                 return self.send(404, {'error': 'missing file'})
             return self.send(200, open(path, 'rb').read(), custom.MIME.get(os.path.splitext(path)[1].lower(), 'application/octet-stream'))
+        # DDR II's own dancers, built from your disc as a .glb when asked for (see ddr2char.py)
+        if p == '/api/ddr2chars':
+            g = STATE.get('game')
+            return self.send(200, ddr2char.dancers(g.files) if g else [])
+        m = re.match(r'^/api/ddr2char/(\d{3})/(\d{1,2})$', p)
+        if m:
+            g = STATE.get('game')
+            key = ('ddr2char', m.group(1), int(m.group(2)))
+            if key not in STAGE_CACHE:
+                try:
+                    data = ddr2char.glb(g.files, m.group(1), m.group(2)) if g else None
+                except Exception as ex:
+                    log('ddr2 dancer', m.group(1), 'failed:', ex)
+                    data = None
+                if not data:
+                    return self.send(404, {'error': 'no dancer'})
+                if len(STAGE_CACHE) > 8:
+                    STAGE_CACHE.pop(next(iter(STAGE_CACHE)))
+                STAGE_CACHE[key] = data
+            return self.send(200, STAGE_CACHE[key], 'model/gltf-binary')
         if p == '/api/dancermodel':
             path = load_settings().get('dancer_model')
             if not path or not os.path.isfile(path):
@@ -869,7 +1057,173 @@ class H(BaseHTTPRequestHandler):
                 if os.path.isfile(os.path.join(g.files, 'movie', rel.replace('/', os.sep))):
                     return self.send(200, {'file': rel})
             return self.send(404, {'error': 'none'})
+        m = re.match(r'^/api/hp(dance|char)/(\d+)$', p)
+        if m:
+            h = STATE['hp']
+            if not h:
+                return self.send(404, {'error': 'no disc'})
+            if m.group(1) == 'dance':
+                path = h.dance_path(int(m.group(2)))
+            else:
+                path = h.char_path(m.group(2)) if re.match(r'^\d{3}$', m.group(2)) else None
+            if not path:
+                return self.send(404, {'error': 'not found'})
+            if path not in STAGE_CACHE:
+                if len(STAGE_CACHE) > 8:
+                    STAGE_CACHE.pop(next(iter(STAGE_CACHE)))
+                if m.group(1) == 'dance':
+                    d000 = os.path.join(h.files, 'dll', 'd000Dll.rel')
+                    data = hpchar.dance(path, d000 if os.path.isfile(d000) else None, h.song(int(m.group(2)))['ssq'])
+                else:
+                    data = hpchar.character(path)
+                STAGE_CACHE[path] = json.dumps(data).encode()
+            return self.send(200, STAGE_CACHE[path], 'application/json')
+        # Hottest Party 2's (and 3's) dancers: /api/hp2char/<base CHR number xy0>/<outfit 1-4>, /api/hp2dance/<slot>
+        # (HP3 keeps its models in sound/stream/character, like DDR II; the same reader works for them)
+        m = re.match(r'^/api/hp([23])(char/(\d{2})0/(\d)|dance/(\d+))$', p)
+        if m:
+            g2 = STATE.get('hp' + m.group(1))
+            m = re.match(r'^/api/hp[23](char/(\d{2})0/(\d)|dance/(\d+))$', p)
+            if not g2:
+                return self.send(404, {'error': 'no disc'})
+            if m.group(2):
+                cd = os.path.join(g2.files, 'character')
+                if not os.path.isdir(cd):
+                    cd = os.path.join(g2.files, 'sound', 'stream', 'character')
+                path = os.path.join(cd, 'CHR%s0.bin' % m.group(2))
+                outfit = os.path.join(cd, 'CHR%s%s.bin' % (m.group(2), m.group(3)))
+                key = outfit
+            else:
+                s = g2.song(int(m.group(4)))
+                path = s and os.path.join(g2.files, 'motion', 'MOT010_SSQ%03d.bin' % (s['ssq'] + 1))
+                key = path
+            if not path or not os.path.isfile(path):
+                return self.send(404, {'error': 'not found'})
+            if key not in STAGE_CACHE:
+                if len(STAGE_CACHE) > 8:
+                    STAGE_CACHE.pop(next(iter(STAGE_CACHE)))
+                try:
+                    if m.group(2):
+                        data = hp2char.character(path, outfit)
+                    else:
+                        bpm = s.get('bpm') or [120]
+                        data = hp2char.dance(path, (bpm[0] if isinstance(bpm, list) else bpm) or 120)
+                except Exception as ex:
+                    log('hp2', p, 'failed:', ex)
+                    return self.send(404, {'error': str(ex)})
+                STAGE_CACHE[key] = json.dumps(data).encode()
+            return self.send(200, STAGE_CACHE[key], 'application/json')
+        m = re.match(r'^/api/hpbgm/(\d{3})$', p)
+        if m:
+            h = STATE['hp']
+            d = h and os.path.join(h.files, 'sound', 'stream')
+            hit = d and next((f for f in os.listdir(d) if f.lower() == 'mu_bgm_%s.brstm' % m.group(1)), None)
+            return self.send(200, open(os.path.join(d, hit), 'rb').read()) if hit else self.send(404, {'error': 'no bgm'})
+        m = re.match(r'^/api/hpidx/(arrow)/(\d+)$', p)
+        if m:
+            h = STATE['hp']
+            img = h and h.ui_index(m.group(1), int(m.group(2)))
+            return self.send(200, img, 'image/png') if img else self.send(404, {'error': 'no image'})
+        m = re.match(r'^/api/hpui/(ddrmodesel|selcom|win|playersel|chrsel|ctrsel|ddrresultsp|gamemes|matcheck|effect|arrow)/(\d+)$', p)
+        if m:
+            h = STATE['hp']
+            img = h and h.ui(m.group(1), int(m.group(2)))
+            return self.send(200, img, 'image/png') if img else self.send(404, {'error': 'no image'})
+        if p == '/api/hpimg/logo':
+            h = STATE['hp']
+            img = h and h.logo()
+            return self.send(200, img, 'image/png') if img else self.send(404, {'error': 'no logo'})
+        if p == '/api/hpstages':
+            h = STATE['hp']
+            return self.send(200, h.stage_list() if h else [])
+        if p == '/api/hpmenu':
+            h = STATE['hp']
+            path = h and os.path.join(h.files, 'data', 'win.bin')
+            if not path or not os.path.isfile(path):
+                return self.send(404, {'error': 'no menu'})
+            if 'menu' not in STAGE_CACHE:
+                STAGE_CACHE['menu'] = json.dumps(hpstage.menu(path)).encode()
+            return self.send(200, STAGE_CACHE['menu'], 'application/json')
+        if p == '/api/hp1gc':                      # GROOVE CIRCUIT (Hottest Party's requests, from its disc)
+            h = STATE['hp']
+            r = hp.gc_requests(h.files) if h else None
+            if r:
+                hid = getattr(h, 'hidden', [])
+                r['lesson'] = hid[0]['slot'] if hid else None
+                r['lessonSong'] = hid[0] if hid else None
+            return self.send(200, r)
+        if p == '/api/hp2ga':                      # GROOVE ARENA (Hottest Party 2's requests, from its disc)
+            h2 = STATE['hp2']
+            r = hp2.ga_texts(h2.files) if h2 else None
+            if r:
+                r['rounds'] = hp2.ga_rounds(h2.sysdir, r['requests'])     # the game's own table (main.dol)
+            return self.send(200, r)
+        if p == '/api/lessons':                    # DDR SCHOOL (Hottest Party 3's lessons)
+            h3 = STATE['hp3']
+            return self.send(200, h3.lessons() if h3 else [])
+        m = re.match(r'^/api/hp3(art/(\d+)|sel/([0-9.]+))$', p)
+        if m:
+            h3 = STATE['hp3']
+            img = h3 and (h3.art(int(m.group(2))) if m.group(2) else h3.sel([int(x) for x in m.group(3).split('.') if x]))
+            return self.send(200, img, 'image/png') if img else self.send(404, {'error': 'no image'})
+        m = re.match(r'^/api/hp2art/(\d+)$', p)
+        if m:
+            h2 = STATE['hp2']
+            img = h2 and h2.art(int(m.group(1)))
+            return self.send(200, img, 'image/png') if img else self.send(404, {'error': 'no image'})
+        m = re.match(r'^/api/hp2(gui|sel)/(\d+)$', p)
+        if m:
+            h2 = STATE['hp2']
+            img = h2 and (h2.gui if m.group(1) == 'gui' else h2.sel)(int(m.group(2)))
+            return self.send(200, img, 'image/png') if img else self.send(404, {'error': 'no image'})
+        # Hottest Party 2's and 3's stages (the same formats): /api/hp2stages, /api/hp3stage/NNN ...
+        m = re.match(r'^/api/hp([23])stages$', p)
+        if m:
+            h2 = STATE['hp' + m.group(1)]
+            d = h2 and os.path.join(h2.files, 'stage')
+            names = sorted(n[3:6] for n in os.listdir(d) if re.match(r'^STG\d{3}\.bin$', n)) if d and os.path.isdir(d) else []
+            # (Hottest Party 3's 2xx stages put the camera inside their sky dome: left out until that's sorted)
+            return self.send(200, [n for n in names if n != '000' and not (m.group(1) == '3' and n.startswith('2'))])
+        m = re.match(r'^/api/hp([23])stage/(\d{3})$', p)
+        if m:
+            h2 = STATE['hp' + m.group(1)]
+            path = h2 and os.path.join(h2.files, 'stage', 'STG%s.bin' % m.group(2))
+            if not path or not os.path.isfile(path):
+                return self.send(404, {'error': 'no stage'})
+            if path not in STAGE_CACHE:
+                if len(STAGE_CACHE) > 2:
+                    STAGE_CACHE.pop(next(iter(STAGE_CACHE)))
+                STAGE_CACHE[path] = json.dumps(hp2stage.stage(path)).encode()
+            return self.send(200, STAGE_CACHE[path], 'application/json')
+        m = re.match(r'^/api/hpstage/(\d+)$', p)
+        if m:
+            h = STATE['hp']
+            path = h and h.stage_path(int(m.group(1)), q.get('stage', 'random'))
+            if h and re.match(r'^\d\d$', q.get('n', '')):          # a stage by its number (for testing)
+                path = os.path.join(h.files, 'data', 'stg%s.bin' % q['n'])
+                path = path if os.path.isfile(path) else None
+            if not path:
+                return self.send(404, {'error': 'no stage'})
+            if path not in STAGE_CACHE:
+                if len(STAGE_CACHE) > 2:
+                    STAGE_CACHE.pop(next(iter(STAGE_CACHE)))
+                STAGE_CACHE[path] = json.dumps(hpstage.stage(path)).encode()
+            return self.send(200, STAGE_CACHE[path], 'application/json')
         m = re.match(r'^/api/(chart|audio|preview|jacket|title)/(\d+)$', p)
+        if m and int(m.group(2)) >= hp.SLOT_BASE:
+            kind, n = m.group(1), int(m.group(2))
+            h = STATE['hp3'] if n >= hp3.SLOT_BASE else STATE['hp2'] if n >= hp2.SLOT_BASE else STATE['hp']
+            if not h or not h.song(n):
+                return self.send(404, {'error': 'no such song'})
+            if kind == 'chart':
+                return self.send(200, h.chart(n))
+            if kind == 'audio':
+                return self.send(200, h.audio(n))
+            if kind == 'preview':
+                path = h.preview_path(n)
+                return self.send(200, open(path, 'rb').read()) if path else self.send(404, {'error': 'no preview'})
+            img = h.jacket(n) if kind == 'jacket' else None
+            return self.send(200, img, 'image/png') if img else self.send(404, {'error': 'no image'})
         if m:
             kind, n = m.group(1), int(m.group(2))
             if kind == 'chart':
@@ -948,7 +1302,9 @@ class H(BaseHTTPRequestHandler):
             if what == 'iso':
                 path = body.get('path') or pick_path('Pick your Dance Dance Revolution II (USA) Wii disc',
                                                      'Wii discs (*.iso;*.wbfs;*.rvz;*.gcz;*.ciso;*.wia)|*.iso;*.wbfs;*.rvz;*.gcz;*.ciso;*.wia')
-                if path:
+                if path and disc_kind(path) == 'hp':
+                    use_hp_disc(path)           # the Hottest Party disc picked on this row: add it as the extra disc
+                elif path:
                     use_disc(path)
                 else:
                     SETUP['msg'] = 'No disc picked.'
@@ -967,9 +1323,71 @@ class H(BaseHTTPRequestHandler):
                     SETUP['msg'] = 'DolphinTool found. Now pick your disc.'
             elif what == 'folder':
                 path = body.get('path') or pick_folder()
-                if path:
+                if path and hp3.find_files(path) and not locate_here(path):
+                    open_hp3(path)                # a Hottest Party 3 folder: added as the fourth game
+                    SETUP['msg'] = ('Hottest Party 3 added (%d songs).' % len(STATE['hp3'].songs)) if STATE['hp3'] \
+                        else 'That folder could not be read: %s' % STATE['hp3Error']
+                elif path and hp2.find_files(path) and not locate_here(path):
+                    open_hp2(path)                # a Hottest Party 2 folder: added as the third game
+                    SETUP['msg'] = ('Hottest Party 2 added (%d songs).' % len(STATE['hp2'].songs)) if STATE['hp2'] \
+                        else 'That folder could not be read: %s' % STATE['hp2Error']
+                elif path and hp.find_files(path) and not locate_here(path):
+                    open_hp(path)                 # a Hottest Party folder: added as the extra disc
+                    SETUP['msg'] = ('Hottest Party added (%d songs).' % len(STATE['hp'].songs)) if STATE['hp'] \
+                        else 'That folder could not be read: %s' % STATE['hpError']
+                elif path:
+                    old = STATE['game']
                     open_game(path)
-                    SETUP['msg'] = 'Ready.' if STATE['game'] else 'That folder could not be read: %s' % STATE['error']
+                    if not STATE['game'] and old:     # keep the game that was working
+                        err = STATE['error']
+                        STATE['game'] = old
+                        SETUP['msg'] = 'That folder could not be read (%s). Still using %s.' % (err, old.root)
+                    else:
+                        SETUP['msg'] = 'Ready.' if STATE['game'] else 'That folder could not be read: %s' % STATE['error']
+            elif what in ('hpiso', 'hpfolder'):
+                if what == 'hpiso':
+                    path = body.get('path') or pick_path('Pick your Dance Dance Revolution Hottest Party (USA) Wii disc',
+                                                         'Wii discs (*.iso;*.wbfs;*.rvz;*.gcz;*.ciso;*.wia)|*.iso;*.wbfs;*.rvz;*.gcz;*.ciso;*.wia')
+                    if path and disc_kind(path) == 'ddr2':
+                        SETUP['msg'] = 'That is the DDR II disc - pick the Hottest Party one on this row.'
+                        path = 'x'
+                    elif path:
+                        use_hp_disc(path)
+                else:
+                    path = body.get('path') or pick_folder()
+                    if path:
+                        open_hp(path)
+                        SETUP['msg'] = 'Hottest Party added.' if STATE['hp'] else 'That folder could not be read: %s' % STATE['hpError']
+                if not path:
+                    SETUP['msg'] = 'Nothing picked.'
+            elif what == 'hp2folder':
+                path = body.get('path') or pick_folder()
+                if path:
+                    open_hp2(path)
+                    SETUP['msg'] = ('Hottest Party 2 added (%d songs).' % len(STATE['hp2'].songs)) if STATE['hp2'] \
+                        else 'That folder could not be read: %s' % STATE['hp2Error']
+                else:
+                    SETUP['msg'] = 'Nothing picked.'
+            elif what == 'hp3folder':
+                path = body.get('path') or pick_folder()
+                if path:
+                    open_hp3(path)
+                    SETUP['msg'] = ('Hottest Party 3 added (%d songs).' % len(STATE['hp3'].songs)) if STATE['hp3'] \
+                        else 'That folder could not be read: %s' % STATE['hp3Error']
+                else:
+                    SETUP['msg'] = 'Nothing picked.'
+            elif what == 'hp3remove':
+                STATE['hp3'] = None
+                st = load_settings(); st.pop('hp3_folder', None); st['hp3_off'] = True; save_settings(st)
+                SETUP['msg'] = 'Hottest Party 3 songs removed from the list (your disc and files are untouched).'
+            elif what == 'hp2remove':
+                STATE['hp2'] = None
+                st = load_settings(); st.pop('hp2_folder', None); st['hp2_off'] = True; save_settings(st)
+                SETUP['msg'] = 'Hottest Party 2 songs removed from the list (your disc and files are untouched).'
+            elif what == 'hpremove':
+                STATE['hp'] = None
+                st = load_settings(); st.pop('hp_folder', None); st['hp_off'] = True; save_settings(st)
+                SETUP['msg'] = 'Hottest Party songs removed from the list (your disc and files are untouched).'
             elif what == 'skipffmpeg':
                 st = load_settings(); st['ffmpeg_skip'] = True; save_settings(st)
             return self.send(200, setup_status())
@@ -995,6 +1413,17 @@ def main():
         folder = args[0]
     if folder:
         open_game(folder)
+    st = load_settings()
+    hpf = st.get('hp_folder') or (None if st.get('hp_off') else hp.default_folder())
+    if hpf:
+        open_hp(hpf)
+    hp2f = st.get('hp2_folder') or (None if st.get('hp2_off') else hp2.default_folder())
+    if hp2f:
+        open_hp2(hp2f)
+    hp3.Thp = Thp
+    hp3f = st.get('hp3_folder') or (None if st.get('hp3_off') else hp3.default_folder())
+    if hp3f:
+        open_hp3(hp3f)
     srv = ThreadingHTTPServer(('127.0.0.1', PORT), H)
     url = 'http://127.0.0.1:%d/' % PORT
     log('DDR II PC running at', url, '- close this window to quit')

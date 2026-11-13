@@ -1,0 +1,410 @@
+23:53:26 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+23:53:26 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+05:44:38 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+05:44:38 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+16:21:19 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+16:21:19 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+16:22:19 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+16:22:19 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+16:52:56 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+16:52:56 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+17:11:31 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+17:11:31 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+17:27:23 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+17:27:23 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+17:29:39 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+17:29:39 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+17:35:40 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+17:35:40 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+17:58:31 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+17:58:31 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+18:09:41 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+18:09:41 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+18:13:43 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+18:13:43 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+18:19:05 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+18:19:05 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+18:25:02 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+18:25:02 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+18:38:56 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+18:38:56 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+18:40:24 GET /api/movie/frames?f=zz_pv%2Fddr024.thp&s=2250&n=30 failed: [WinError 10053] An established connection was aborted by the software in your host machine Traceback (most recent call last):
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 627, in do_GET
+    self.route_get(unquote(u.path))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 675, in route_get
+    return self.send(200, m.chunk(int(q.get('s', 0)), min(240, int(q.get('n', 30))), q.get('a') == '1'))
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 589, in send
+    self.wfile.write(body)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\john_\AppData\Local\Python\pythoncore-3.15-64\Lib\socketserver.py", line 842, in write
+    self._sock.sendall(b)
+    ~~~~~~~~~~~~~~~~~~^^^
+ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine
+
+18:41:22 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+18:41:22 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+18:49:02 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+18:49:02 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+18:55:36 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+18:55:36 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+18:58:38 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+18:58:38 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+19:01:23 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+19:01:23 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+21:32:41 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+21:32:41 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+21:42:08 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+21:42:08 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+21:43:02 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+21:43:02 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+21:43:34 POST /api/custom failed: [WinError 10053] An established connection was aborted by the software in your host machine Traceback (most recent call last):
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 799, in route_post
+    return self.send(200, {'ok': True, 'added': added, 'skipped': skipped, 'noVideo': noconv})
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 589, in send
+    self.wfile.write(body)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\john_\AppData\Local\Python\pythoncore-3.15-64\Lib\socketserver.py", line 842, in write
+    self._sock.sendall(b)
+    ~~~~~~~~~~~~~~~~~~^^^
+ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 636, in do_POST
+    self.route_post(urlparse(self.path).path, body)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 804, in route_post
+    return self.send(200, {'ok': False, 'error': str(ex)})
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 588, in send
+    self.end_headers()
+    ~~~~~~~~~~~~~~~~^^
+  File "C:\Users\john_\AppData\Local\Python\pythoncore-3.15-64\Lib\http\server.py", line 580, in end_headers
+    self.flush_headers()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\john_\AppData\Local\Python\pythoncore-3.15-64\Lib\http\server.py", line 584, in flush_headers
+    self.wfile.write(b"".join(self._headers_buffer))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\AppData\Local\Python\pythoncore-3.15-64\Lib\socketserver.py", line 842, in write
+    self._sock.sendall(b)
+    ~~~~~~~~~~~~~~~~~~^^^
+ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine
+
+21:45:31 POST /api/custom failed: [WinError 10053] An established connection was aborted by the software in your host machine Traceback (most recent call last):
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 799, in route_post
+    return self.send(200, {'ok': True, 'added': added, 'skipped': skipped, 'noVideo': noconv})
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 589, in send
+    self.wfile.write(body)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\john_\AppData\Local\Python\pythoncore-3.15-64\Lib\socketserver.py", line 842, in write
+    self._sock.sendall(b)
+    ~~~~~~~~~~~~~~~~~~^^^
+ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 636, in do_POST
+    self.route_post(urlparse(self.path).path, body)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 804, in route_post
+    return self.send(200, {'ok': False, 'error': str(ex)})
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 588, in send
+    self.end_headers()
+    ~~~~~~~~~~~~~~~~^^
+  File "C:\Users\john_\AppData\Local\Python\pythoncore-3.15-64\Lib\http\server.py", line 580, in end_headers
+    self.flush_headers()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\john_\AppData\Local\Python\pythoncore-3.15-64\Lib\http\server.py", line 584, in flush_headers
+    self.wfile.write(b"".join(self._headers_buffer))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\AppData\Local\Python\pythoncore-3.15-64\Lib\socketserver.py", line 842, in write
+    self._sock.sendall(b)
+    ~~~~~~~~~~~~~~~~~~^^^
+ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine
+
+22:07:08 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+22:07:08 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+22:07:25 GET /api/custom/chart/cafb2e40992 failed: [Errno 2] No such file or directory: 'C:\\Users\\john_\\Downloads\\DDR II PC\\Custom Songs\\ddr a20\\Incognito\\Incognito.sm' Traceback (most recent call last):
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 627, in do_GET
+    self.route_get(unquote(u.path))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 708, in route_get
+    return self.send(200, custom.convert(s['_file'])[0])
+                          ~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\custom.py", line 137, in convert
+    song = parse(path)
+  File "C:\Users\john_\Downloads\DDR II PC\custom.py", line 53, in parse
+    t = tags(read_text(path))
+             ~~~~~~~~~^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\custom.py", line 36, in read_text
+    raw = open(path, 'rb').read()
+          ~~~~^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\john_\\Downloads\\DDR II PC\\Custom Songs\\ddr a20\\Incognito\\Incognito.sm'
+
+22:11:30 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+22:11:30 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+22:26:33 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+22:26:33 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+22:26:33 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+22:34:41 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+22:34:41 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+22:34:41 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+05:41:00 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+05:41:01 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+05:41:01 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+05:43:27 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+05:43:28 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+05:43:28 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+05:44:33 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+05:44:33 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+05:44:33 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+05:55:26 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+05:55:26 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+05:55:26 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+06:01:06 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+06:01:06 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+06:01:06 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+16:26:44 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+16:26:45 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+16:26:45 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+21:57:41 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+21:57:41 game folder C:\Users\john_\Downloads\Dance Dance Revolution II (USA) (En,Fr,Es) songs 83
+21:57:41 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+21:57:41 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+21:59:09 open failed: Could not find sys/main.dol and sound/DDRHP5_SOUND.brsar in C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA)
+21:59:19 game folder C:\Users\john_\Downloads songs 83
+22:11:42 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+22:11:42 game folder C:\Users\john_\Downloads songs 83
+22:11:42 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+22:11:42 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+22:14:00 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+22:14:00 game folder C:\Users\john_\Downloads songs 83
+22:14:00 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+22:14:00 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+22:17:28 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+22:17:28 game folder C:\Users\john_\Downloads songs 83
+22:17:29 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+22:17:29 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+22:25:57 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+22:25:57 game folder C:\Users\john_\Downloads songs 83
+22:25:57 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+22:25:57 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+22:31:53 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+22:31:53 game folder C:\Users\john_\Downloads songs 83
+22:31:53 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+22:31:53 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+22:49:23 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+22:49:23 game folder C:\Users\john_\Downloads songs 83
+22:49:23 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+22:49:23 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+22:50:55 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+22:50:55 game folder C:\Users\john_\Downloads songs 83
+22:50:55 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+22:50:55 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+23:04:38 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+23:04:38 game folder C:\Users\john_\Downloads songs 83
+23:04:39 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+23:04:39 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+23:27:06 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+23:27:06 game folder C:\Users\john_\Downloads songs 83
+23:27:06 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+23:27:06 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+23:52:53 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+23:52:53 game folder C:\Users\john_\Downloads songs 83
+23:52:53 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+23:52:53 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+23:52:53 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+06:49:16 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+06:49:16 game folder C:\Users\john_\Downloads songs 83
+06:49:17 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+06:49:17 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+06:49:17 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+08:27:10 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+08:27:10 game folder C:\Users\john_\Downloads songs 83
+08:27:10 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+08:27:11 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+08:27:11 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+08:28:50 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+08:28:50 game folder C:\Users\john_\Downloads songs 83
+08:28:50 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+08:28:50 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+08:28:50 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+11:54:03 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+11:54:04 game folder C:\Users\john_\Downloads songs 83
+11:54:04 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+11:54:04 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+11:54:04 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+11:56:56 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+11:56:56 game folder C:\Users\john_\Downloads songs 83
+11:56:56 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+11:56:57 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+11:56:57 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+11:58:35 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+11:58:35 game folder C:\Users\john_\Downloads songs 83
+11:58:35 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+11:58:35 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+11:58:35 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+12:00:49 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+12:00:49 game folder C:\Users\john_\Downloads songs 83
+12:00:49 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+12:00:49 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+12:00:49 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+12:03:34 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+12:03:34 game folder C:\Users\john_\Downloads songs 83
+12:03:34 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+12:03:34 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+12:03:34 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+12:04:50 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+12:04:50 game folder C:\Users\john_\Downloads songs 83
+12:04:50 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+12:04:50 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+12:04:50 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+12:09:26 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+12:09:26 game folder C:\Users\john_\Downloads songs 83
+12:09:26 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+12:09:26 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+12:09:26 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+12:09:46 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+12:09:46 game folder C:\Users\john_\Downloads songs 83
+12:09:46 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+12:09:46 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+12:09:46 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+13:25:41 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+13:25:41 game folder C:\Users\john_\Downloads songs 82
+13:25:41 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+13:25:41 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+13:25:42 Hottest Party 3 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 3 (USA) songs 59
+13:25:42 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+13:27:55 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+13:27:55 game folder C:\Users\john_\Downloads songs 82
+13:27:55 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+13:27:55 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+13:27:55 Hottest Party 3 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 3 (USA) songs 59
+13:27:55 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+13:28:14 GET /api/hp2gui/20 failed: 'HP2Game' object has no attribute '_guisrc' Traceback (most recent call last):
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 911, in do_GET
+    self.route_get(unquote(u.path))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 1145, in route_get
+    img = h2 and (h2.gui if m.group(1) == 'gui' else h2.sel)(int(m.group(2)))
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\hp2.py", line 247, in gui
+    if self._guisrc and 0 <= idx < len(self._guisrc[1]):
+       ^^^^^^^^^^^^
+AttributeError: 'HP2Game' object has no attribute '_guisrc'
+
+13:28:14 GET /api/hp2gui/12 failed: 'HP2Game' object has no attribute '_guisrc' Traceback (most recent call last):
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 911, in do_GET
+    self.route_get(unquote(u.path))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 1145, in route_get
+    img = h2 and (h2.gui if m.group(1) == 'gui' else h2.sel)(int(m.group(2)))
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\hp2.py", line 247, in gui
+    if self._guisrc and 0 <= idx < len(self._guisrc[1]):
+       ^^^^^^^^^^^^
+AttributeError: 'HP2Game' object has no attribute '_guisrc'
+
+13:28:14 GET /api/hp2gui/11 failed: 'HP2Game' object has no attribute '_guisrc' Traceback (most recent call last):
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 911, in do_GET
+    self.route_get(unquote(u.path))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 1145, in route_get
+    img = h2 and (h2.gui if m.group(1) == 'gui' else h2.sel)(int(m.group(2)))
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\hp2.py", line 247, in gui
+    if self._guisrc and 0 <= idx < len(self._guisrc[1]):
+       ^^^^^^^^^^^^
+AttributeError: 'HP2Game' object has no attribute '_guisrc'
+
+13:28:14 GET /api/hp2gui/19 failed: 'HP2Game' object has no attribute '_guisrc' Traceback (most recent call last):
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 911, in do_GET
+    self.route_get(unquote(u.path))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 1145, in route_get
+    img = h2 and (h2.gui if m.group(1) == 'gui' else h2.sel)(int(m.group(2)))
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\hp2.py", line 247, in gui
+    if self._guisrc and 0 <= idx < len(self._guisrc[1]):
+       ^^^^^^^^^^^^
+AttributeError: 'HP2Game' object has no attribute '_guisrc'
+
+13:29:45 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+13:29:45 game folder C:\Users\john_\Downloads songs 82
+13:29:45 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+13:29:45 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+13:29:45 Hottest Party 3 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 3 (USA) songs 59
+13:29:45 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+13:33:47 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+13:33:47 game folder C:\Users\john_\Downloads songs 82
+13:33:48 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+13:33:48 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+13:33:48 Hottest Party 3 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 3 (USA) songs 59
+13:33:48 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+13:35:28 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+13:35:28 game folder C:\Users\john_\Downloads songs 82
+13:35:28 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+13:35:29 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+13:35:29 Hottest Party 3 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 3 (USA) songs 59
+13:35:29 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+14:38:42 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+14:38:42 game folder C:\Users\john_\Downloads songs 82
+14:38:42 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+14:38:43 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+14:38:43 Hottest Party 3 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 3 (USA) songs 59
+14:38:43 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+14:43:48 GET /api/hp2gui/15 failed: 'HP2Game' object has no attribute '_guisrc' Traceback (most recent call last):
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 911, in do_GET
+    self.route_get(unquote(u.path))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 1151, in route_get
+    hid = getattr(h, 'hidden', [])
+             ~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\hp2.py", line 247, in gui
+    if self._guisrc and 0 <= idx < len(self._guisrc[1]):
+       ^^^^^^^^^^^^
+AttributeError: 'HP2Game' object has no attribute '_guisrc'
+
+14:45:22 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+14:45:22 game folder C:\Users\john_\Downloads songs 82
+14:45:22 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+14:45:22 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+14:45:23 Hottest Party 3 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 3 (USA) songs 59
+14:45:23 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit
+14:45:40 GET /api/hp2gui/15 failed: 'HP2Game' object has no attribute '_guisrc' Traceback (most recent call last):
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 911, in do_GET
+    self.route_get(unquote(u.path))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 1171, in route_get
+    img = h2 and (h2.gui if m.group(1) == 'gui' else h2.sel)(int(m.group(2)))
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\hp2.py", line 247, in gui
+    if self._guisrc and 0 <= idx < len(self._guisrc[1]):
+       ^^^^^^^^^^^^
+AttributeError: 'HP2Game' object has no attribute '_guisrc'
+
+14:45:40 GET /api/hp2gui/20 failed: 'HP2Game' object has no attribute '_guisrc' Traceback (most recent call last):
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 911, in do_GET
+    self.route_get(unquote(u.path))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\server.py", line 1171, in route_get
+    img = h2 and (h2.gui if m.group(1) == 'gui' else h2.sel)(int(m.group(2)))
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\john_\Downloads\DDR II PC\hp2.py", line 247, in gui
+    if self._guisrc and 0 <= idx < len(self._guisrc[1]):
+       ^^^^^^^^^^^^
+AttributeError: 'HP2Game' object has no attribute '_guisrc'
+
+15:00:24 lights: PacDrive64.dll not found. Get it from Ultimarc's PacDrive SDK and put it next to DDR II PC (or pick it here).
+15:00:24 game folder C:\Users\john_\Downloads songs 82
+15:00:24 Hottest Party folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party (USA) songs 51
+15:00:24 Hottest Party 2 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 2 (USA) songs 51
+15:00:24 Hottest Party 3 folder C:\Users\john_\Downloads\Dance Dance Revolution - Hottest Party 3 (USA) songs 59
+15:00:24 DDR II PC running at http://127.0.0.1:8767/ - close this window to quit

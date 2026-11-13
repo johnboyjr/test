@@ -1,4 +1,107 @@
 {
- "profiles": {},
- "current": null
+ "profiles": {
+  "JOHN": {
+   "points": 43500,
+   "records": {
+    "23:single:3": {
+     "score": 581690,
+     "grade": "D",
+     "fc": 0,
+     "plays": 1
+    },
+    "83:single:2": {
+     "score": 356290,
+     "grade": "E",
+     "fc": 0,
+     "plays": 1
+    },
+    "1001:single:1": {
+     "score": 673810,
+     "grade": "C",
+     "fc": 0,
+     "plays": 1
+    },
+    "1011:single:2": {
+     "score": 737200,
+     "grade": "B",
+     "fc": 0,
+     "plays": 3
+    },
+    "2002:single:1": {
+     "score": 34606400,
+     "grade": "C",
+     "fc": 0,
+     "plays": 1
+    },
+    "2001:single:4": {
+     "score": 9680050,
+     "grade": "B",
+     "fc": 0,
+     "plays": 1
+    },
+    "1005:single:1": {
+     "score": 862060,
+     "grade": "AA",
+     "fc": 3,
+     "plays": 1
+    },
+    "3000:single:1": {
+     "score": 0,
+     "grade": "E",
+     "fc": 0,
+     "plays": 1
+    },
+    "3001:single:1": {
+     "score": 847010,
+     "grade": "A",
+     "fc": 0,
+     "plays": 1
+    },
+    "3016:single:2": {
+     "score": 40274835,
+     "grade": "D",
+     "fc": 0,
+     "plays": 1
+    }
+   },
+   "opts": {
+    "style": "single",
+    "diff": 2,
+    "speed": 2,
+    "appearance": "visible",
+    "turn": "off",
+    "freezes": true,
+    "marvelous": true,
+    "colors": "rainbow",
+    "gauge": "normal",
+    "lastSlot": 3016,
+    "short": true,
+    "ngBreaksCombo": false,
+    "jump": true,
+    "cut": false,
+    "guideline": false,
+    "evaluation": true
+   },
+   "orders": [
+    [
+     12,
+     14,
+     16,
+     18,
+     20,
+     22
+    ]
+   ],
+   "weight": 66,
+   "workoutLog": [
+    {
+     "date": "11/13/2026",
+     "kcal": 6.858500000000001,
+     "secs": 86.20000000000002,
+     "songs": 1
+    }
+   ]
+  }
+ },
+ "current": "JOHN"
 }
