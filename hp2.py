@@ -98,7 +98,37 @@ def tpl_png(d, w, h, fmt, off):
         if x < w and y < h:
             o = (y * w + x) * 4
             px[o:o + 4] = c
-    if fmt == 5:
+    # the other GameCube formats (stages use the grey + alpha ones for glows and masks):
+    # 0 I4 (8x8 tiles), 1 I8 (8x4), 2 IA4 (8x4), 3 IA8 (4x4), 4 RGB565 (4x4)
+    if fmt in (0, 1, 2, 3, 4):
+        bw, bh = {0: (8, 8), 1: (8, 4), 2: (8, 4), 3: (4, 4), 4: (4, 4)}[fmt]
+        p = off
+        for ty in range(0, h, bh):
+            for tx in range(0, w, bw):
+                for y in range(bh):
+                    for x in range(bw):
+                        if fmt == 0:
+                            v = d[p + ((y * bw + x) >> 1)]
+                            v = (v >> 4 if not x & 1 else v & 15) * 17
+                            c = bytes((v, v, v, v))
+                        elif fmt == 1:
+                            v = d[p + y * bw + x]
+                            c = bytes((v, v, v, v))
+                        elif fmt == 2:
+                            v = d[p + y * bw + x]
+                            i, a = (v & 15) * 17, (v >> 4) * 17
+                            c = bytes((i, i, i, a))
+                        elif fmt == 3:
+                            q = p + 2 * (y * bw + x)
+                            a, i = d[q], d[q + 1]
+                            c = bytes((i, i, i, a))
+                        else:
+                            q = p + 2 * (y * bw + x)
+                            v = (d[q] << 8) | d[q + 1]
+                            c = bytes(((v >> 11) * 255 // 31, ((v >> 5) & 63) * 255 // 63, (v & 31) * 255 // 31, 255))
+                        put(tx + x, ty + y, c)
+                p += {0: 32, 1: 32, 2: 32, 3: 32, 4: 32}[fmt]
+    elif fmt == 5:
         p = off
         for ty in range(0, h, 4):
             for tx in range(0, w, 4):
@@ -442,3 +472,21 @@ def ga_rounds(sysdir, texts):
             arenas.append(reqs)
         out.append(arenas)
     return out
+
+
+def ga_courses(sysdir):
+    """Groove Arena's 20 courses (sys/main.dol): 24-byte records of six song numbers (-1 = none); a course is
+    3 songs, or 4 when the 4th is set. The game picks course N by record N."""
+    p = os.path.join(sysdir, 'main.dol')
+    if not os.path.isfile(p):
+        return None
+    d = open(p, 'rb').read()
+
+    def ok(o):
+        w = struct.unpack_from('>6i', d, o)
+        return all(0 <= x < 52 for x in w[:3]) and -1 <= w[3] < 52 and w[4] == -1 and w[5] == -1
+
+    for o in range(0, len(d) - 24 * 20, 4):
+        if ok(o) and all(ok(o + 24 * k) for k in range(20)):
+            return [[x for x in struct.unpack_from('>6i', d, o + 24 * k)[:4] if x >= 0] for k in range(20)]
+    return None

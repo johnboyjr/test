@@ -352,6 +352,7 @@ class HPGame:
             raise ValueError('Not an extracted Hottest Party disc: ' + root)
         self.root = root
         sysdir, self.files = hit
+        self.sysdir = os.path.join(sysdir, 'sys')
         self.dol = Dol(os.path.join(sysdir, 'sys', 'main.dol'))
         self.rsar = Rsar(os.path.join(self.files, 'sound', 'ddr.brsar'))
         self.ssq = open(os.path.join(self.files, 'data', 'ssq.bin'), 'rb').read()
@@ -600,3 +601,46 @@ def gc_requests(files):
         return lines[i:i + 25] if i is not None and len(lines) >= i + 25 else None
     r1, r2 = run('Clear 1 designated song'), run('Clear 3 designated songs on Difficult')
     return dict(round1=r1, round2=r2) if r1 and r2 else None
+
+
+# ---- Groove Circuit's own request table, read from sys/main.dol ----
+# 2 rounds x 9 venues x 3 slots, 172 bytes each. In a slot (as 32-bit words): [16] how many songs of your
+# choice, [17] how many designated songs and [18..23] their numbers, [24] score to beat, [25] most 'Boo'
+# allowed (0xFFFF: no limit), [26] combo to beat, [27] grade (2 AA, 3 A, 4 B, 7 none), [28] difficulty
+# (0 any, 1 BASIC, 2 DIFFICULT, 3 EXPERT), [35] 2 for the Venue Master. INCEPTION uses one slot.
+GC_GRADE = {1: 'AAA', 2: 'AA', 3: 'A', 4: 'B', 5: 'C', 6: 'D'}
+
+
+def gc_table(sysdir):
+    p = os.path.join(sysdir, 'main.dol')
+    if not os.path.isfile(p):
+        return None
+    d = open(p, 'rb').read()
+    W = lambda o: struct.unpack_from('>43I', d, o)
+    # SYSTRONIX's three requests are the 20,000,000-point ones: the first is venue 5, slot 0 of round 1
+    i = d.find(struct.pack('>I', 20000000))
+    while i >= 0:
+        o = i - 96
+        if all(W(o + 172 * k)[24] == 20000000 for k in range(3)):
+            start = o - 15 * 172
+            break
+        i = d.find(struct.pack('>I', 20000000), i + 1)
+    else:
+        return None
+    rounds = []
+    for r in range(2):
+        venues = []
+        for v in range(9):
+            reqs = []
+            for s in range(3):
+                w = W(start + (r * 27 + v * 3 + s) * 172)
+                if not w[16] and not w[17]:
+                    continue
+                songs = [x for x in w[18:18 + min(w[17], 6)]]
+                q = dict(n=w[16] or len(songs), songs=songs or None, diff=w[28], master=(s == 2 and v > 0),
+                         score=w[24] or None, boo=None if w[25] == 0xFFFF else w[25], combo=w[26] or None,
+                         grade=GC_GRADE.get(w[27]))
+                reqs.append(q)
+            venues.append(reqs)
+        rounds.append(venues)
+    return rounds

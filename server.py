@@ -4,14 +4,16 @@ Reads the extracted Dance Dance Revolution II (USA, Wii) files on request and se
 them to the browser game in web/. Nothing is converted or copied; the game folder is
 only ever read. Standard library only.
 """
-import json, os, struct, sys, threading, time, traceback, webbrowser, subprocess, re, math
+import base64, json, os, struct, sys, threading, time, traceback, webbrowser, subprocess, re, math
 from sfx import SoundIndex
 import dance
+import ddr2fx
 import custom
 import hp
 import hp2
 import hp3
 import hp2stage
+import cae
 import hpstage
 import hpchar
 import hp2char
@@ -224,6 +226,8 @@ RES_FILES = {
     'gui': ['game/gui_us.tpl', 'game/gui.tpl'],
     'cmn': ['game/GAME_CMN_US.bin'],
     'mfm': ['game/METER_FM_US.bin'],
+    'mmu': ['game/METER_MULTI_US.bin'],
+    'fs2': ['game/METER_FS2_US.bin'],
     'ssq': ['ssq/SSQ_CMN.bin'],
     'bg': ['game/bg.tpl'],
     'pvbg': ['game/pv_bg.tpl'],
@@ -233,6 +237,8 @@ RES_FILES = {
     'scm': ['select/select_cmn.bin'],
     'ttl': ['select/selTitle_US.bin', 'select/selTitle_us.bin'],
     'af': ['2Dcommon/comAF_US.bin'],
+    'font': ['font/font_us.bin'],
+    'logo': ['logo/logo_ENG.tpl'],
     'eff': ['game/GAME_APL_EFF.bin'],
 }
 
@@ -390,6 +396,163 @@ class Game:
         self.songs = self._songs()
         log('game folder', root, 'songs', len(self.songs))
 
+    # COURSE 1-10 then WORKOUT 1-10: 24-byte records of six numbers (slot - 1, -1 = none)
+    COURSE_VA = 0x8027B688
+
+    def courses(self):
+        rows = []
+        for k in range(20):
+            w = struct.unpack('>6i', self.dol.bytes(self.COURSE_VA + 24 * k, 24))
+            if not all(-1 <= x < DB_COUNT for x in w):
+                return None
+            rows.append([x + 1 for x in w if x >= 0])
+        return dict(courses=rows[:10], workouts=rows[10:])
+
+    # TOURNAMENT MODE: 4 stages x 8 requests, 68-byte records [kind, difficulty, ?, condition, value,
+    # songs to clear, gimmick, then up to 10 song numbers (slot - 1, -1 = none)].
+    #   kind 1 songs of your choice, 3 specified songs (clear n of them), 8 beat a dancer (1 of their
+    #   songs + 1 of yours), 9 the final (4 songs), 10 clear 1 of the specified songs
+    #   condition 1 rank (2 C, 3 B, 4 A), 2 MAX COMBO at least, 5 Dance Gauge at least %, 6 PERFECT at
+    #   least, 7 GREAT at least, 10 MISS at most. Before it: 18 dancers' song lists (4 songs each).
+    TOUR_VA = 0x80279560
+    TOUR_POOLS_VA = 0x80279420
+
+    def tournament(self):
+        rows = []
+        for k in range(32):
+            w = struct.unpack('>17i', self.dol.bytes(self.TOUR_VA + 68 * k, 68))
+            if not (1 <= w[0] <= 12 and 0 <= w[1] <= 4):
+                return None
+            rows.append(dict(kind=w[0], diff=w[1], cond=w[3], value=w[4], n=w[5], gimmick=w[6],
+                             songs=[x + 1 for x in w[7:17] if x >= 0]))
+        pools = []
+        for k in range(18):
+            w = struct.unpack('>5i', self.dol.bytes(self.TOUR_POOLS_VA + 20 * k, 20))
+            pools.append([x + 1 for x in w if x >= 0])
+        texts = []
+        try:
+            d = open(os.path.join(self.files, 'text', 'text_eng.bin'), 'rb').read()
+            _, o, sz = hp2stage.wii_entries(d)[6]
+            lines = [x.decode('utf-8', 'replace') for x in d[o:o + sz].split(b'\0')]
+            i = next(k for k, t in enumerate(lines) if t.startswith('Clear 1 of the 3 specified'))
+            for t in lines[i:]:
+                t = re.sub(r'\s+', ' ', t).strip()
+                if re.match(r'^(Clear|Beat|Win) ', t):
+                    texts.append(t)
+                if len(texts) == 32:
+                    break
+        except (OSError, StopIteration, IndexError, ValueError):
+            texts = []
+        return dict(rows=rows, pools=pools, texts=texts)
+
+    # DDR points unlocks: 24-byte records [points, type, id, a, b, c]; type 1 = a song (slot = id + 1),
+    # 2 = an outfit (id 200-205) or a Mii body part (id 82-89, b = its number - 1), 7 = Mii characters
+    UNLOCK_VA = 0x8027BF38
+
+    # DDR II's 3D stage for a song (main.dol 0x8003d1f0 / 0x8004c0f4): the song DB's word at +8 is the
+    # song's own stage (the video songs' screen stages 27-29, 18, 200); -1 with flag bits 0x30000 = no
+    # stage; otherwise song select draws one at random from stages 10-29 (files STG011-STG030),
+    # leaving out the ones used recently. A stage id n is the file stage/STG(n+1).bin.
+    STAGE_HISTORY = []
+
+    def stage_extras(self, slot):
+        """the two extra stage files a song loads beside its stage (0x80118724 -> 0x8011919c into slots 1
+        and 2): song record +16 points to a pair of stage ids in main.dol (0x802e7c48..); the game counts
+        the pair's leading ids (record +12 = 2 in memory, -1 ends it). Wings of an Angel: 420, 405 ->
+        STG421 (its light spots and the background video bgv16) and STG406 (a backdrop with two monitors);
+        all three Dolphin plays loaded both, at the origin, beside STG012 / 014 / 017"""
+        if not 1 <= slot <= 200:
+            return []
+        try:
+            ptr = struct.unpack('>I', self.dol.bytes(0x802A44A8 + 412 * slot + 16, 4))[0]
+            if not 0x80000000 <= ptr < 0x81800000:
+                return []
+            out = []
+            for v in struct.unpack('>2i', self.dol.bytes(ptr, 8)):
+                if v < 0:
+                    break
+                out.append(v)
+            return out
+        except Exception:
+            return []
+
+    def dancer_ambient(self, n):
+        """the dancers' ambient colour on stage n (DDR2_SPEC.md "the light show decoded"): light preset 0 of
+        the stage's light record (0x80290970 + 24 x (n - 10) for 10-29, 0x802908b0 + 24 x n for 0-7; extra
+        stages 400-439: 0x802bef50 [n - 400]) -> clamp(colour +116 x sum of the masked channel weights x F)"""
+        try:
+            if 10 <= n <= 29:
+                p = self.dol.u32(0x80290970 + 24 * (n - 10) + 16)
+            elif 0 <= n <= 7:
+                p = self.dol.u32(0x802908B0 + 24 * n + 16)
+            elif 400 <= n <= 439:
+                p = self.dol.u32(0x802BEF50 + 4 * (n - 400))
+            else:
+                return None
+            if self.dol.off(p) is None or self.dol.off(p + 120) is None:
+                return None
+            f = lambda va: struct.unpack('>f', self.dol.bytes(va, 4))[0]
+            F, mask, c = f(p + 4), self.dol.u32(p + 80), self.dol.u32(p + 116)
+            w = sum(f(p + 12 + 4 * k) for k in range(8) if mask >> k & 1)
+            # (single-precision products, truncated like the game's fctiwz: c8b4ff x 0.65 = 8274a5)
+            f32 = lambda v: struct.unpack('>f', struct.pack('>f', v))[0]
+            return [min(255, int(f32(f32(((c >> sh) & 255) * w) * F))) for sh in (24, 16, 8)]
+        except Exception:
+            return None
+
+    def stage_for(self, slot):
+        # the step lessons: stage 19 (STG020.bin, the STG110 models - the yellow-grid floor; Dolphin camtrace of
+        # Step Lesson 1: STG110 was the stage in memory). STG023.bin is the same file.
+        if self.LESSON_BASE < slot <= self.LESSON_BASE + 6:
+            return 19
+        if not 1 <= slot <= 200:
+            return None
+        b = self.dol.bytes(0x802A44A8 + 412 * slot, 12)
+        flags, st = struct.unpack_from('>Ii', b, 4)
+        if st != -1:
+            return st
+        if flags & 0x30000:
+            return None
+        d = os.path.join(self.files, 'stage')
+        # The random pool (0x8004b16c builds it, 0x8004c0f4 draws): the stages 10-29 whose bit is set in the
+        # save's stage word (save +32, bit = stage id; 0x8009ba94 sets one). A new save starts with
+        # 0x3fc00 (0x8009ac64 / 0x8009b59c) = stages 10-17, and the player's Dolphin save still had only
+        # those. Nothing sets another stage bit: the only setter is reward type 3 (0x8010d0d0) and none of the
+        # reward builders (0x8010c080 / 0x8010c448 / 0x8010cbcc) ever makes one, so 18-29 stay out of the draw.
+        have = [n for n in range(10, 18) if os.path.isfile(os.path.join(d, 'STG%03d.bin' % (n + 1)))]
+        if not have:
+            return None
+        recent = self.STAGE_HISTORY[-(len(have) - 1):] if len(have) > 1 else []
+        pool = [n for n in have if n not in recent] or have
+        import random
+        n = random.choice(pool)
+        self.STAGE_HISTORY.append(n)
+        del self.STAGE_HISTORY[:-20]
+        return n
+
+    # DDR II's demo play (attract mode), main.dol: 16 entries of 6 bytes at 0x8027b878, played in turn
+    # (0x800f3ebc steps the index, wrapping at 16): [type (0 = normal, 6 = stage 18), dancers, song code
+    # (a slot, or 1000 = any song), b4 (stored per player beside 9; read as difficulty 0/1)]. Run as game
+    # mode 8 (0x800452b0 / 0x800457c8): auto play, 1,000,000-point scoring, any button quits.
+    DEMO_VA = 0x8027b878
+
+    def demos(self):
+        out = []
+        b = self.dol.bytes(self.DEMO_VA, 16 * 6)
+        for i in range(16):
+            t, n, song, b4, b5 = struct.unpack_from('>bbhbb', b, 6 * i)
+            out.append(dict(type=t, dancers=n, song=song, b4=b4))
+        return out
+
+    def unlocks(self):
+        rows = []
+        for k in range(400):
+            w = struct.unpack('>6i', self.dol.bytes(self.UNLOCK_VA + 24 * k, 24))
+            if not (0 < w[0] <= 5000000) or w[1] not in (1, 2, 3, 4, 5, 6, 7):
+                break
+            rows.append(list(w))
+        return rows or None
+
     def entry(self, slot):
         return self.dol.bytes(DB_VA + (slot - 1) * DB_STRIDE, DB_STRIDE)
 
@@ -523,9 +686,104 @@ class Game:
                         jacket=(cut or slot) - 1, alt=alt)
             song.update(info)
             out.append(song)
+        return self._versions(out)
+
+    # London EVOLVED: three songs (game ids 92 / 94 / 96 = slots 93 / 95 / 97, Ver.A / B / C - each with
+    # its own chart and its own dance, HP4U_053 / 054 / 055) shown as one. Song select lists only id 92
+    # (0x80076628); starting it (0x8004be98) turns id 92 into 92 + 2 x (rand() % 3) in every mode but 5.
+    VERSION_GROUPS = [(93, 95, 97)]
+
+    def _versions(self, out):
+        for grp in self.VERSION_GROUPS:
+            vers = []
+            for sl in grp:
+                try:
+                    e = self.entry(sl)
+                    if not os.path.isfile(self.chart_path(sl)) or not self.has_audio(sl):
+                        continue
+                    v = self.song_info(sl, e)
+                    v['jacket'] = sl - 1
+                    vers.append(v)
+                except (OSError, IndexError, struct.error, ValueError):
+                    continue
+            if len(vers) < 2:
+                continue
+            listed = [s for s in out if s.get('slot') in grp or (s.get('alt') or {}).get('slot') in grp]
+            if not listed:
+                continue
+            base = next((s for s in listed if s.get('slot') == grp[0]), listed[0])
+            for s in listed:
+                if s is not base:
+                    out.remove(s)
+            base['alt'] = None
+            base['cut'] = None
+            base['versions'] = vers
         return out
 
+    # DDR SCHOOL (main.dol: chart file ssq/Lss4/LESSON%02d.ss4 for lesson songs, text_eng entry 14 for the
+    # teacher's words, select_bin group 11 for its screen): STEP LESSON 1-6 = LESSON01-06, CHOREOGRAPH
+    # LESSON 1-5 = LESSON07-11, Wii Balance Board LESSON 1-4 = LESSON12-15. The step lessons are written
+    # for the foot markers (style 0x1a, lanes 4/5, the arrow's direction in the note's flag byte 1:
+    # 0 up, 2 right, 4 down, 6 left; 0x100 = freeze end). Their music: the lessons are songs 201-215 in the
+    # sound table (SNDTAB, one row a lesson): the six step lessons share wave group 200 (music 577),
+    # CHOREOGRAPH 1-5 groups 201-205, the balance board lessons 206 / 206 / 206 / 207 - so lesson n plays
+    # slot 200 + n (not the "Lesson by DJ" song, slot 137, as assumed before).
+    LESSON_BASE = 800
+
+    def lessons(self):
+        words = []
+        try:
+            d = open(os.path.join(self.files, 'text', 'text_eng.bin'), 'rb').read()
+            _, o, sz = hp2stage.wii_entries(d)[14]
+            words = [p.decode('utf-8', 'replace') for p in d[o:o + sz].split(b'\0') if len(p) > 3]
+        except (OSError, IndexError, struct.error):
+            pass
+        out = []
+        for n in range(1, 16):
+            if not os.path.isfile(os.path.join(self.files, 'ssq', 'Lss4', 'LESSON%02d.ss4' % n)):
+                continue
+            kind, k, w = (('STEP LESSON', n, n) if n <= 6 else ('CHOREOGRAPH LESSON', n - 6, n) if n <= 11
+                          else ('Wii Balance Board LESSON', n - 11, n + 2))
+            text = re.sub(r'#[a-z]{2}', '', words[w]) if w < len(words) else ''
+            out.append(dict(slot=self.LESSON_BASE + n, n=n, name='%s %d' % (kind, k), kind=kind.split(' LESSON')[0].upper(),
+                            artist='DDR SCHOOL', words=text, lesson=n, playable=n <= 6,
+                            single=[1, 0, 0, 0, 0], double=[0, 0, 0, 0, 0], bpm=[120, 120], radar=[[0] * 5] * 5,
+                            preview=False, jacket=None, title=None, movie=None, folder='DDR SCHOOL'))
+        return out
+
+    def lesson_chart(self, n):
+        """a step lesson's chart as an ordinary BEGINNER single chart (key 0x414)"""
+        d = bytearray(open(os.path.join(self.files, 'ssq', 'Lss4', 'LESSON%02d.ss4' % n), 'rb').read())
+        p = 0
+        lane_of = {0: 2, 2: 3, 4: 1, 6: 0}                    # direction -> L D U R lane
+        while p + 12 <= len(d):
+            size, typ, p2, cnt = struct.unpack_from('<IHHI', d, p)
+            if not size:
+                break
+            if typ == 16 and (p2 & 0xff) == 0x1a:
+                base = p + 12 + 4 * cnt
+                fb = (base + cnt + 3) & ~3
+                last = {}
+                for i in range(cnt):
+                    fl = struct.unpack_from('>I', d, fb + 4 * i)[0]
+                    foot = d[base + i]
+                    # the foot (lane 4 = left: lesson 1's left arrows; 5 = right) stays in the flag's top bits
+                    # (1 left, 2 right) - the lesson colours its arrows by foot: left blue, right red
+                    # (the game's explanation text, and the footage)
+                    fk = (1 if foot == 4 else 2) << 28
+                    if fl & 0x100:                            # freeze end: same arrow as this foot's last
+                        d[base + i] = last.get(foot, 0)
+                        struct.pack_into('>I', d, fb + 4 * i, 0x100 | fk)
+                    else:
+                        d[base + i] = last[foot] = lane_of.get((fl >> 8) & 0xff, 0)
+                        struct.pack_into('>I', d, fb + 4 * i, fk)
+                struct.pack_into('<H', d, p + 6, 0x414)
+            p += size
+        return bytes(d)
+
     def audio(self, slot):
+        if self.LESSON_BASE < slot <= self.LESSON_BASE + 15:
+            slot = 200 + (slot - self.LESSON_BASE)
         woff, wsize = self.rsar.group_wave(self.sound_row(slot)[0])
         with open(self.rsar.path, 'rb') as f:
             f.seek(woff)
@@ -962,9 +1220,12 @@ class H(BaseHTTPRequestHandler):
         if p == '/api/movie/info':
             try:
                 return self.send(200, movie_of(q.get('f', '')).info())
-            except (OSError, ValueError) as ex:
+            except Exception as ex:
+                log('movie', q.get('f', ''), 'failed:', ex)
                 return self.send(404, {'error': str(ex)})
         if p == '/api/movie/frames':
+            if q.get('s') == '0':
+                log('movie frames', q.get('f', ''))
             m = movie_of(q.get('f', ''))
             return self.send(200, m.chunk(int(q.get('s', 0)), min(240, int(q.get('n', 30))), q.get('a') == '1'))
         if p == '/api/sfx':
@@ -1005,9 +1266,58 @@ class H(BaseHTTPRequestHandler):
                 return self.send(404, {'error': 'missing file'})
             return self.send(200, open(path, 'rb').read(), custom.MIME.get(os.path.splitext(path)[1].lower(), 'application/octet-stream'))
         # DDR II's own dancers, built from your disc as a .glb when asked for (see ddr2char.py)
+        if p == '/api/ddr2shader':
+            # character/CHR_SHADER.bin's first texture (256 x 256): the game's lighting ramp, read by the
+            # GAME STYLE dancer lighting (DDR2_SPEC.md); only used on DDR II PC's own dancer
+            g = STATE.get('game')
+            path = g and os.path.join(g.files, 'character', 'CHR_SHADER.bin')
+            if not path or not os.path.isfile(path):
+                return self.send(404, {'error': 'no shader file'})
+            d = open(path, 'rb').read()
+            ents = hp2stage.wii_entries(d)
+            pngs = ddr2fx.tpl_pngs(d, ents[0][1]) if ents else []
+            if not pngs or not pngs[0]:
+                return self.send(404, {'error': 'no ramp'})
+            return self.send(200, base64.b64decode(pngs[0]), 'image/png')
+        m = re.match(r'^/api/ddr2charicon/(\d{1,3})$', p)
+        if m:
+            # Read from the user's configured extracted disc, never a bundled upload.
+            game = STATE.get('game')
+            path = game and os.path.join(game.files, 'select', 'select_bin_us.bin')
+            if not path or not os.path.isfile(path):
+                return self.send(404, {'error': 'character menu archive missing from game folder'})
+            index = int(m.group(1))
+            if index > 100:
+                return self.send(404, {'error': 'unknown character icon'})
+            stamp = os.stat(path)
+            key = ('ddr2charicons', path, stamp.st_mtime_ns, stamp.st_size)
+            try:
+                if key not in STAGE_CACHE:
+                    data = open(path, 'rb').read()
+                    offset = 0
+                    for part in (2, 3, 0, 0):
+                        offset = hp2stage.wii_entries(data, offset)[part][1]
+                    if len(STAGE_CACHE) > 8:
+                        STAGE_CACHE.pop(next(iter(STAGE_CACHE)))
+                    STAGE_CACHE[key] = ddr2fx.tpl_pngs(data, offset)
+                icons = STAGE_CACHE[key]
+                if index >= len(icons) or not icons[index]:
+                    return self.send(404, {'error': 'character icon unavailable'})
+                return self.send(200, base64.b64decode(icons[index]), 'image/png')
+            except (OSError, ValueError, IndexError, struct.error):
+                return self.send(404, {'error': 'could not decode character icons'})
         if p == '/api/ddr2chars':
             g = STATE.get('game')
-            return self.send(200, ddr2char.dancers(g.files) if g else [])
+            out = ddr2char.dancers(g.files) if g else []
+            # each dancer's sex for MY CHARACTER's RANDOM (girls) / RANDOM (boys): the low 2 bits of the
+            # character flags 0x8026e9b0 [game id - 200] (1 = girl, 2 = boy; EMI, RUBY, YUNI, Rena, jun = 1)
+            for c in out:
+                try:
+                    gid = int(c['id']) - 1
+                    c['sex'] = g.dol.u32(0x8026E9B0 + 4 * (gid - 200)) & 3 if 200 <= gid <= 208 else 0
+                except Exception:
+                    c['sex'] = 0
+            return self.send(200, out)
         m = re.match(r'^/api/ddr2char/(\d{3})/(\d{1,2})$', p)
         if m:
             g = STATE.get('game')
@@ -1042,6 +1352,12 @@ class H(BaseHTTPRequestHandler):
         m = re.match(r'^/api/dance/(\d+)$', p)
         if m:
             slot = int(m.group(1))
+            pm = [re.match(r'^(HP\d[UJE]?)_(\d{3})_([SLE])(\d{2})$', x) for x in q.get('parts', '').split(',') if x]
+            if len(pm) == 5 and all(pm):
+                # a given set of picks (the five parts a Dolphin dump shows), for checking against camtrace
+                d = dance.pool_dance_parts(os.path.join(g.files, 'dance'),
+                                           [(x.group(1), int(x.group(2)), x.group(3), int(x.group(4))) for x in pm])
+                return self.send(200, d) if d else self.send(404, {'error': 'no dance'})
             if slot not in DANCE_CACHE:
                 if len(DANCE_CACHE) > 3:
                     DANCE_CACHE.pop(next(iter(DANCE_CACHE)))
@@ -1051,6 +1367,9 @@ class H(BaseHTTPRequestHandler):
                     log('dance', slot, 'failed:', ex)
                     DANCE_CACHE[slot] = None
             d = DANCE_CACHE[slot]
+            if d and d.get('parts'):
+                DANCE_CACHE.pop(slot, None)      # a pool song's dance is picked anew every play (dance.pool_picks)
+                log('dance', slot, d['parts'])
             return self.send(200, d) if d else self.send(404, {'error': 'no dance'})
         if p == '/api/menumovie':
             for rel in ('select/OP.thp', 'select/OP43.thp'):
@@ -1144,6 +1463,265 @@ class H(BaseHTTPRequestHandler):
             if 'menu' not in STAGE_CACHE:
                 STAGE_CACHE['menu'] = json.dumps(hpstage.menu(path)).encode()
             return self.send(200, STAGE_CACHE['menu'], 'application/json')
+        m = re.match(r'^/api/ddr2stage/(\d+)$', p)
+        if m:                                       # DDR II's own 3D stage for this song (see Game.stage_for)
+            g0 = STATE.get('game')
+            n = g0.stage_for(int(m.group(1))) if g0 else None
+            if g0 and re.match(r'^\d{1,3}$', q.get('n', '')):     # a stage by its id (for testing)
+                n = int(q['n'])
+            path = n is not None and os.path.join(g0.files, 'stage', 'STG%03d.bin' % (n + 1))
+            if not path or not os.path.isfile(path):
+                return self.send(404, {'error': 'no stage'})
+            extras = [] if q.get('n') and not q.get('x') else g0.stage_extras(int(m.group(1)))
+            key = path + '|' + ','.join(map(str, extras))
+            if key not in STAGE_CACHE:
+                if len(STAGE_CACHE) > 2:
+                    STAGE_CACHE.pop(next(iter(STAGE_CACHE)))
+                try:
+                    st = hp2stage.stage(path, ddr2=True)
+                    st['id'] = n
+                    # the song's two extra stage files = the stage's variants 1 and 2, which the dance's cues
+                    # switch to (column 9: 0x80113838 -> 0x80129308 / 0x8005386c); each has its own movie
+                    # (0x80055590 slots 1, 2 - Dolphin memory 0x808b13e4 kinds 3 / 1 / 2 = single06 / bgv16 /
+                    # quarter for STG017 + STG421 + STG406). A kind-1 (bgv) variant is the movie behind the
+                    # dancers in place of a stage
+                    try:
+                        sc0 = ddr2fx.stage_screen(path)
+                    except Exception:
+                        sc0 = None
+                    st['variantKinds'] = [sc0.get('kind') if sc0 else -1]
+                    st['extras'] = []
+                    for k, x in enumerate(extras):
+                        p2 = os.path.join(g0.files, 'stage', 'STG%03d.bin' % (x + 1))
+                        if not os.path.isfile(p2):
+                            continue
+                        try:
+                            s2 = hp2stage.stage(p2, ddr2=True)
+                        except Exception as ex:
+                            log('ddr2 extra stage', x, 'failed:', ex)
+                            continue
+                        for md in s2.get('models', []):
+                            md['movieSlot'] = k + 1
+                        try:
+                            sc2 = ddr2fx.stage_screen(p2)
+                        except Exception:
+                            sc2 = None
+                        st['variantKinds'].append(sc2.get('kind') if sc2 else -1)
+                        st['models'] = st.get('models', []) + s2.get('models', [])
+                        st['extras'].append(x)
+                    # the backup silhouettes' picture: main.dol's 32-byte stage records at 0x802b8eb0
+                    # (record = stage id - 4), word +28: 0-2 = stage/STG_SILHOUETTE01-03.tpl, else none
+                    # (0x80118724 loads STG_SILHOUETTE%02d with +28 + 1; checked against Dolphin logs/memory)
+                    # the dancers' ambient colour for each variant (the stage, then its extra files)
+                    st['dancerAmb'] = [g0.dancer_ambient(v) for v in [n] + st['extras']]
+                    st['silhouette'] = 0
+                    if 4 <= n < 36:
+                        try:
+                            v = struct.unpack('>i', g0.dol.bytes(0x802B8EB0 + 32 * (n - 4) + 28, 4))[0]
+                            st['silhouette'] = v + 1 if 0 <= v <= 2 else 0
+                        except Exception:
+                            pass
+                    if n in (200, 204, 205):
+                        # the boss stage (STG201 and its _02 / _03 copies): the OBJA_Z_ props are the
+                        # opening scene played before READY (the grass island with the record player,
+                        # its sky and the wormhole); the song itself is danced in the neon tunnel
+                        # (DRAW_STG201_0n) in space (BG_STG201), the dancers flying through it
+                        # (Dolphin footage: the opening - a wipe onto the island, the three dancers on the
+                        # grass at night, the portal opening above them, the flight up - then READY in the
+                        # tunnel). The OBJA_Z_ props are drawn only during the opening, with its cameras
+                        for md in st['models']:
+                            if md.get('name', '').startswith('OBJA_Z_'):
+                                md['intro'] = True
+                        st['introCams'] = hp2stage.intro_cameras(path)
+                    cam = os.path.join(g0.files, 'game', 'GAME_DEF_CAM.bin')
+                    if os.path.isfile(cam):             # the game's own gameplay camera moves
+                        cams = hp2stage.ddr2_cameras(cam)
+                        if cams:
+                            st['cameras'] = cams
+                    try:                                # effects, their spots and the stage's light (ddr2fx.py)
+                        st['fx'] = ddr2fx.stage_effects(path, g0.files, g0.dol, n)
+                    except Exception as ex:
+                        log('ddr2 stage effects', n, 'failed:', ex)
+                    # materials tagged 11-90 take their light channel's colours (0x8004d91c): material white,
+                    # ambient = the channel's (ddr2fx.stage_fx light.channel) - only the boss portal has them
+                    chans = ((st.get('fx') or {}).get('light') or {}).get('channel')
+                    if chans:
+                        for md in st.get('models', []):
+                            if md.get('movieSlot'):
+                                continue
+                            for mt in md.get('materials', []):
+                                gx = mt.get('gx') or {}
+                                tg = gx.get('tag') or 0
+                                if 11 <= tg <= 90 and (tg - 11) // 10 < len(chans):
+                                    gx['mat'] = [255, 255, 255, gx.get('mat', [0, 0, 0, 255])[3]]
+                                    gx['amb'] = chans[(tg - 11) // 10]
+                    STAGE_CACHE[key] = json.dumps(st).encode()
+                    log('ddr2 stage', n, 'for song', m.group(1), 'extras', st['extras'], 'models', len(st['models']), 'screens',
+                        sum(1 for md in st['models'] for mt in md.get('materials', []) if (mt.get('gx') or {}).get('movie')),
+                        'silhouette', st.get('silhouette'))
+                except Exception as ex:
+                    log('ddr2 stage', n, 'failed:', ex)
+                    return self.send(404, {'error': 'no stage'})
+            return self.send(200, STAGE_CACHE[key], 'application/json')
+        m = re.match(r'^/api/ddr2sil/([1-3])/(\d{1,2})$', p)
+        if m:                                       # stage/STG_SILHOUETTE0n.tpl: 40 frames of the backup silhouettes' texture
+            g0 = STATE.get('game')
+            path = g0 and os.path.join(g0.files, 'stage', 'STG_SILHOUETTE%02d.tpl' % int(m.group(1)))
+            if not path or not os.path.isfile(path):
+                return self.send(404, {'error': 'no silhouette'})
+            key = ('sil', path)
+            if key not in STAGE_CACHE:
+                d = open(path, 'rb').read()
+                STAGE_CACHE[key] = [hp2.tpl_png(d, w, h, f, o) for w, h, f, o in hp2.tpl_list(d, 0)]
+            fr = STAGE_CACHE[key]
+            i = int(m.group(2))
+            return self.send(200, fr[i % len(fr)], 'image/png') if fr else self.send(404, {'error': 'empty'})
+        m = re.match(r'^/api/ddr2movie/(\d+)$', p)
+        if m:                                       # the movie on the stage's screens (ddr2fx.screen_movie)
+            g0 = STATE.get('game')
+            n = g0.stage_for(int(m.group(1))) if g0 else None
+            if g0 and re.match(r'^\d{1,3}$', q.get('n', '')):
+                n = int(q['n'])
+            path = n is not None and os.path.join(g0.files, 'stage', 'STG%03d.bin' % (n + 1))
+            mv, scr = None, None
+            if path and os.path.isfile(path):
+                try:
+                    scr = ddr2fx.stage_screen(path)
+                    import random as _r
+                    mv = ddr2fx.screen_movie(g0.files, scr, int(m.group(1)), _r.Random())
+                except Exception as ex:
+                    log('ddr2 stage movie failed:', ex)
+            # the extra stage files' screens: each plays its own (0x80055590 is run for slots 0-2)
+            movies = [mv]
+            if g0 and not q.get('n2'):
+                import random as _r2
+                for x in g0.stage_extras(int(m.group(1))):
+                    p2 = os.path.join(g0.files, 'stage', 'STG%03d.bin' % (x + 1))
+                    try:
+                        movies.append(ddr2fx.screen_movie(g0.files, ddr2fx.stage_screen(p2), int(m.group(1)), _r2.Random())
+                                      if os.path.isfile(p2) else None)
+                    except Exception:
+                        movies.append(None)
+            log('ddr2 stage movie', n, '->', movies, '| screen', scr)
+            return self.send(200, {'movie': mv, 'movies': movies})
+        if p == '/api/ddr2demo':
+            g0 = STATE.get('game')
+            return self.send(200, {'demos': g0.demos() if g0 else []})
+        m = re.match(r'^/api/cae/([a-zA-Z0-9_]+)$', p)
+        if m:                                       # a menu file's 2D layouts + animation scripts (cae.py)
+            g0 = STATE.get('game')
+            key = m.group(1)
+            rel = {'mus': 'select/selMusic_us.bin', 'res': 'select/selResult_US.bin', 'ttl': 'select/selTitle_US.bin',
+                   'sel': 'select/select_bin_us.bin', 'scm': 'select/select_cmn.bin', 'af': '2Dcommon/comAF_US.bin',
+                   'mmu': 'game/METER_MULTI_US.bin', 'fs2': 'game/METER_FS2_US.bin'}.get(key)
+            path = None
+            if g0 and rel:                          # the disc's file names differ in case (selResult_us / _US)
+                folder, fname = os.path.split(os.path.join(g0.files, rel))
+                if os.path.isdir(folder):
+                    path = next((os.path.join(folder, f) for f in os.listdir(folder) if f.lower() == fname.lower()), None)
+            if not path or not os.path.isfile(path):
+                return self.send(404, {'error': 'no such file'})
+            d = open(path, 'rb').read()
+            out = []
+            for o in cae.blocks(d):
+                try:
+                    out.append({'at': o, 'parts': cae.parse(d, o)})
+                except Exception as ex:
+                    out.append({'at': o, 'error': str(ex)})
+            return self.send(200, {'blocks': out})
+        if p == '/api/appeal':
+            # the combo performance (main.dol 0x800fd1d0): the performing dancer's motion is clip
+            # type x 2 (+1 for dancers whose flag bit 0 is set, table 0x8026e898 / 0x802b8824) of
+            # game/GAME_APL_MOT01.bin, the camera the same-numbered move of GAME_APL_CAM0n (n = style + 1)
+            g0 = STATE['game']
+            try:
+                style = max(0, min(3, int(q.get('style', 0))))
+                gd = os.path.join(g0.files, 'game')
+                d = open(os.path.join(gd, 'GAME_APL_MOT01.bin'), 'rb').read()
+                clips = []
+                for o, s2 in dance.wii_entries(d):
+                    c = dance.clip(d[o:o + s2]) if s2 else None
+                    clips.append(dict(frames=struct.unpack_from('>I', d, o + 0x10)[0], bones=c) if c else None)
+                cams = hp2stage.appeal_cameras(os.path.join(gd, 'GAME_APL_CAM%02d.bin' % (style + 1)))
+                alt = {}
+                for i in range(9):                  # DDR II's dancers, ids 200-208 (files CHR201-209)
+                    alt[str(201 + i)] = g0.dol.u32(0x8026E9B0 + 4 * i) & 1
+                for i in range(10):                 # Mii bodies 80-89
+                    alt['m%d' % (80 + i)] = g0.dol.u32(0x8026E9D8 + 4 * i) & 1
+                # its stage effects (0x800535f0): GAME_APL_EFF.bin's TEB (bank 3), effect A[style][clip]
+                # (0x80271200, 10 a row) and B[style][type] (0x802712a0, 5 a row), -1 = none
+                i32 = lambda va: struct.unpack('>i', struct.pack('>I', g0.dol.u32(va)))[0]
+                ea = [i32(0x80271200 + 40 * style + 4 * k) for k in range(10)]
+                eb = [i32(0x802712A0 + 20 * style + 4 * k) for k in range(5)]
+                eff = None
+                try:
+                    eff = ddr2fx.bank(open(os.path.join(gd, 'GAME_APL_EFF.bin'), 'rb').read(), 0)
+                except Exception as ex:
+                    log('appeal effects failed:', ex)
+                # its light show (0x80115b80): table 0x802bea80 [style x 60 + type x 12] = F, G, colour C;
+                # the dancers' ambient becomes clamp(C x F) at once, light 0 stays G (1.0 = white)
+                f32 = lambda va: struct.unpack('>f', g0.dol.bytes(va, 4))[0]
+                lights = []
+                for k in range(5):
+                    a = 0x802BEA80 + 60 * style + 12 * k
+                    c = g0.dol.u32(a + 8)
+                    lights.append(dict(F=round(f32(a), 4), G=round(f32(a + 4), 4),
+                                       amb=[min(255, int(struct.unpack('>f', struct.pack('>f', ((c >> sh) & 255) * f32(a)))[0]))
+                                            for sh in (24, 16, 8)]))
+                return self.send(200, dict(clips=clips, cams=cams, alt=alt, effA=ea, effB=eb, bank3=eff, lights=lights))
+            except Exception as ex:
+                log('appeal failed:', ex)
+                return self.send(404, {'error': str(ex)})
+        if p == '/api/ddr2credits':                 # the game's staff credits (text_eng.bin, the entry holding "STAFF")
+            g0 = STATE.get('game')
+            out = []
+            try:
+                d = open(os.path.join(g0.files, 'text', 'text_eng.bin'), 'rb').read()
+                for _, o, sz in hp2stage.wii_entries(d):
+                    blob = d[o:o + sz]
+                    if b'#cfDIRECTOR' not in blob:
+                        continue
+                    on = False
+                    for raw in blob.split(b'\0'):
+                        t = raw.decode('utf-8', 'replace')
+                        if t.startswith('DanceDanceRevolution'):
+                            on = True
+                        if not on or len(t) < 2 or any(ord(c) < 32 and c != '\n' for c in t) or t in ('ZMS', 'WII'):
+                            continue
+                        kind = 'head' if t.startswith('#cf') else 'section' if t.startswith('#cd') else 'name'
+                        out.append([kind, re.sub(r'#c[a-z]', '', t).strip()])
+                    break
+            except (OSError, AttributeError):
+                pass
+            return self.send(200, {'lines': out})
+        if p == '/api/ddr2tour':                    # DDR II's TOURNAMENT MODE (main.dol table + text_eng.bin)
+            g0 = STATE.get('game')
+            return self.send(200, g0.tournament() if g0 else None)
+        if p == '/api/ddr2tasks':
+            # DDR II's challenge task tables (main.dol 0x80291bc8; DDR2_SPEC.md "Challenge task"): which
+            # task is ANY SONG (20), the specified songs for the three DDR-point ranges (27 / 19 / 19 song
+            # ids), and per range the required difficulty (15), gauge (7 bytes at 0x802e9600 + 8 x range),
+            # MAX COMBO (12 halfwords, -1 = FULL COMBO) and rank (9: 2 C .. 5 AA)
+            g = STATE.get('game')
+            if not g:
+                return self.send(404, {'error': 'no game'})
+            B = 0x80291BC8
+            i32 = lambda va: struct.unpack('>i', g.dol.bytes(va, 4))[0]
+            ws = lambda o, n: [i32(B + o + 4 * k) for k in range(n)]
+            hs = lambda o, n: list(struct.unpack('>%dh' % n, g.dol.bytes(B + o, 2 * n)))
+            return self.send(200, dict(
+                kind=ws(0, 20),
+                songs=[ws(80, 27), ws(188, 19), ws(264, 19)],
+                diff=[ws(340, 15), ws(400, 15), ws(460, 15)],
+                gauge=[list(g.dol.bytes(0x802E9600 + 8 * r, 7)) for r in range(3)],
+                combo=[hs(520, 12), hs(544, 12), hs(568, 12)],
+                rank=[ws(592, 9), ws(628, 9), ws(664, 9)]))
+        if p == '/api/ddr2unlocks':                 # DDR II's own DDR-points unlock table (main.dol)
+            g0 = STATE.get('game')
+            return self.send(200, g0.unlocks() if g0 else None)
+        if p == '/api/ddr2courses':                 # DDR II's own COURSE 1-10 and WORKOUT 1-10 (main.dol)
+            g0 = STATE.get('game')
+            return self.send(200, g0.courses() if g0 else None)
         if p == '/api/hp1gc':                      # GROOVE CIRCUIT (Hottest Party's requests, from its disc)
             h = STATE['hp']
             r = hp.gc_requests(h.files) if h else None
@@ -1151,13 +1729,18 @@ class H(BaseHTTPRequestHandler):
                 hid = getattr(h, 'hidden', [])
                 r['lesson'] = hid[0]['slot'] if hid else None
                 r['lessonSong'] = hid[0] if hid else None
+                r['table'] = hp.gc_table(h.sysdir)          # the game's own request table (main.dol)
             return self.send(200, r)
         if p == '/api/hp2ga':                      # GROOVE ARENA (Hottest Party 2's requests, from its disc)
             h2 = STATE['hp2']
             r = hp2.ga_texts(h2.files) if h2 else None
             if r:
                 r['rounds'] = hp2.ga_rounds(h2.sysdir, r['requests'])     # the game's own table (main.dol)
+                r['courses'] = hp2.ga_courses(h2.sysdir)                    # and its 20 courses
             return self.send(200, r)
+        if p == '/api/lessons' and q.get('game') == 'ddr2':   # DDR II's own DDR SCHOOL
+            g0 = STATE.get('game')
+            return self.send(200, g0.lessons() if g0 else [])
         if p == '/api/lessons':                    # DDR SCHOOL (Hottest Party 3's lessons)
             h3 = STATE['hp3']
             return self.send(200, h3.lessons() if h3 else [])
@@ -1226,6 +1809,8 @@ class H(BaseHTTPRequestHandler):
             return self.send(200, img, 'image/png') if img else self.send(404, {'error': 'no image'})
         if m:
             kind, n = m.group(1), int(m.group(2))
+            if kind == 'chart' and g.LESSON_BASE < n <= g.LESSON_BASE + 15:
+                return self.send(200, g.lesson_chart(n - g.LESSON_BASE))
             if kind == 'chart':
                 path = g.chart_path(n)
                 return self.send(200, open(path, 'rb').read()) if os.path.isfile(path) else self.send(404, {'error': 'no chart'})

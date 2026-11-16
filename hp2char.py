@@ -102,6 +102,16 @@ def _bitmaps(tpl, names):
     return out
 
 
+def _skinned(model, rows):
+    for r in rows:
+        try:
+            if struct.unpack_from('>14I', model.z, r)[10]:
+                return True
+        except struct.error:
+            pass
+    return False
+
+
 def character(base, outfit=None):
     """CHRxy0.bin (+ an outfit CHRxyN.bin) -> {objects, meshes, materials, attrs, bitmaps}"""
     d = open(base, 'rb').read()
@@ -177,8 +187,8 @@ def character(base, outfit=None):
             pi, ni, uv, col = [], [], [], []
             nw = [[] for _ in N]
             for corners in faces:
-                for a in range(1, len(corners) - 1):
-                    for p, n, c, t in (corners[0], corners[a], corners[a + 1]):
+                for tri in S.strip(corners):                   # each face is a triangle strip
+                    for p, n, c, t in tri:
                         pi.append(p if p < len(P) else 0)
                         ni.append(n if n < len(N) else 0)
                         uv.extend(T[t] if t < len(T) else (0, 0))
@@ -204,7 +214,8 @@ def character(base, outfit=None):
 
     for i, n in enumerate(nodes):
         if n['meshes']:
-            build(body, i, n['meshes'], 0, rigid_joint=i)
+            # a mesh with no skin weights (bracelets, wings) is stored in its own node's space
+            build(body, i, n['meshes'], 0, rigid_joint=i, place=None if _skinned(body, n['meshes']) else wm(i))
     if head:
         mj = index.get('mii_head', index.get('Head', 0))
         for n in head.nodes():

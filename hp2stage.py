@@ -43,6 +43,10 @@ def wii_entries(d, b=0):
     names = []
     if named:
         p = b + 16 + 8 * cnt
+        area = min(offs[0::2]) - 16 - 8 * cnt if cnt else 0
+        st = 64                                          # DDR II: fixed 64-byte name slots (then padding)
+        if cnt and cnt * st <= area < cnt * st + 64 and all(32 <= d[p + st * i] < 127 for i in range(cnt)):
+            return [(d[p + st * i:p + st * (i + 1)].split(b'\0')[0].decode('latin1'), b + offs[2 * i], offs[2 * i + 1]) for i in range(cnt)]
         for i in range(cnt):
             n = d[p:d.index(b'\0', p)].decode('latin1')
             names.append(n)
@@ -84,9 +88,12 @@ class Zmb:
         if not 0 < o < len(self.z) - 4:
             return []
         n = self.u32(o)
-        if n > (len(self.z) - o) // 32 or n > 512:      # not a texture table
-            return []
         p = o + 16
+        if n > (len(self.z) - o) // 32 or n > 512:      # DDR II: u16 pictures, u16 names, u32 0, u32 offset
+            n = struct.unpack_from('>H', self.z, o + 2)[0]
+            p = self.u32(o + 8)
+            if not 0 < p < len(self.z) or n > (len(self.z) - p) // 32:
+                return []
         out = []
         for i in range(n):
             s = self.z[p:p + 32]
@@ -123,7 +130,23 @@ class Zmb:
             ntex, toff = struct.unpack_from('>II', self.z, r + 0x14)
             ntex &= 0xFFFF                               # (HP3 keeps a flag in the top byte)
             tex = [self.u32(toff + 4 * k) for k in range(min(ntex, 4))] if 0 < toff < len(self.z) else []
-            out.append(dict(color=[min(cr, 255), min(cg, 255), min(cb, 255)], tex=tex, flags=list(flags)))
+            m = dict(color=[min(cr, 255), min(cg, 255), min(cb, 255)], tex=tex, flags=list(flags),
+                     raw=self.z[r:r + 48], stride=stride)
+            if stride == 0x50:
+                # DDR II: +32 / +36 texture scroll speeds, +48 / +52 the texture flipbook's frame times,
+                # +58 / +60 texture-offset keys (see DDR2_SPEC.md: 0x801576fc, 0x8015713c)
+                su, sv = struct.unpack_from('>ff', self.z, r + 32)
+                nt, to = struct.unpack_from('>II', self.z, r + 48)
+                nk, ko = struct.unpack_from('>hI', self.z, r + 58)
+                if 0 < toff < len(self.z) and ntex <= 256:
+                    m['texall'] = [self.u32(toff + 4 * k) for k in range(ntex)]
+                if 1 < nt <= 256 and 0 < to and to + 4 * nt <= len(self.z):
+                    m['times'] = [self.u32(to + 4 * k) for k in range(nt)]
+                if 0 < nk <= 64 and 0 < ko and ko + 16 * nk <= len(self.z):
+                    m['keys'] = [list(struct.unpack_from('>3f', self.z, ko + 16 * k)) + [self.z[ko + 16 * k + 12], self.z[ko + 16 * k + 13]]
+                                 for k in range(nk)]
+                m['speed'] = [su, sv]
+            out.append(m)
         return out
 
     def nodes(self):
@@ -163,6 +186,14 @@ class Zmb:
                 corners.append(tuple(self.u32(lst + 4 * k) if lst else 0 for lst in lists))
             faces.append(corners)
         return mid, P, N, T, C, faces
+
+
+def strip(corners):
+    """a ZMB face is a triangle strip (checked against the stored normals: every triangle of every stage
+    and dancer model faces the same way as its corners' normals when read as a strip, about half do when
+    read as a fan) -> its triangles, all wound the same way"""
+    return [(corners[i], corners[i + 1], corners[i + 2]) if i % 2 == 0 else (corners[i + 1], corners[i], corners[i + 2])
+            for i in range(len(corners) - 2)]
 
 
 def zab(z):
@@ -211,7 +242,49 @@ def quat_euler(x, y, z, w):
     return [math.degrees(rx), math.degrees(ry), math.degrees(rz)]
 
 
-def model(z, tpl_data, tpl_off, anim=None):
+def euler_track(R):
+    """quaternion keys [(frame, x, y, z, w)] -> continuous X/Y/Z angle keys [(frame, [rx, ry, rz])]"""
+    import math
+    out, prev, qp = [], None, None
+    for i, k in enumerate(R):
+        q = list(k[1:5])
+        samples = [(k[0], q)]
+        if qp is not None:
+            f0, a = R[i - 1][0], qp
+            d = sum(x * y for x, y in zip(a, q))
+            if d < 0:                                   # the shorter way round
+                q = [-v for v in q]; d = -d
+            ang = 2 * math.degrees(math.acos(max(-1.0, min(1.0, d))))
+            n = max(1, int(math.ceil(ang / 10)))
+            samples = []
+            th = math.acos(max(-1.0, min(1.0, d)))
+            for j in range(1, n + 1):
+                t = j / n
+                if th < 1e-6:
+                    v = [x + (y - x) * t for x, y in zip(a, q)]
+                else:
+                    s0, s1 = math.sin((1 - t) * th) / math.sin(th), math.sin(t * th) / math.sin(th)
+                    v = [x * s0 + y * s1 for x, y in zip(a, q)]
+                samples.append((f0 + (k[0] - f0) * t, v))
+        qp = q
+        for f, v in samples:
+            e1 = quat_euler(*v)
+            e2 = [e1[0] + 180, 180 - e1[1], e1[2] + 180]
+            best = None
+            for e in (e1, e2):
+                e = list(e)
+                if prev is not None:
+                    for c in range(3):
+                        e[c] += 360 * round((prev[c] - e[c]) / 360)
+                cost = sum(abs(e[c] - prev[c]) for c in range(3)) if prev is not None else (0 if e is e1 else 1)
+                if best is None or cost < best[0]:
+                    best = (cost, e)
+            prev = best[1]
+            out.append((round(f, 3), [round(x, 4) for x in prev]))
+    return out
+
+
+def model(z, tpl_data, tpl_off, anim=None, ddr2=False):
     """one ZMB model and its textures -> the renderer's model dict"""
     m = Zmb(z)
     tex_names = m.textures()
@@ -232,9 +305,8 @@ def model(z, tpl_data, tpl_off, anim=None):
     groups = {}
     moving = {}                                          # node index -> its own groups (animated nodes)
     an = (anim or {}).get('nodes', {})
+    skin_of = {}                                         # skinning node index -> slot (0-3)
     for i, nd in enumerate(nodes):
-        if nd['name'].startswith('OBJB_Z'):              # a box where the dancer stands: not drawn
-            continue
         live = nd['name'] in an and nd['meshes']
         W = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] if live else wm(i)
         for r in nd['meshes']:
@@ -242,10 +314,38 @@ def model(z, tpl_data, tpl_off, anim=None):
                 mid, P, N, T, C, faces = m.mesh(r)
             except struct.error:
                 continue
-            g = (moving.setdefault(i, {}) if live else groups).setdefault(mid, ([], [], [], []))
+            g = (moving.setdefault(i, {}) if live else groups).setdefault(mid, ([], [], [], [], [], []))
+            # skinned parts (the boss tunnel, bound to Dummy01-03): per position, (count, offset) at the
+            # mesh's +0x28 -> 64-byte entries (32-byte node name, +56 node index, +60 weight); only for
+            # nodes the stage's ZAB moves
+            sk = None
+            if ddr2 and an:
+                try:
+                    wo = struct.unpack_from('>I', z, r + 0x28)[0]
+                    if wo:
+                        sk = []
+                        for pi0 in range(len(P)):
+                            n_, o_ = struct.unpack_from('>II', z, wo + 8 * pi0)
+                            ws = []
+                            for k in range(min(n_, 4)):
+                                ni_, w_ = struct.unpack_from('>If', z, o_ + 64 * k + 56)
+                                if 0 <= ni_ < len(nodes) and nodes[ni_]['name'] in an:
+                                    if ni_ not in skin_of and len(skin_of) < 4:
+                                        skin_of[ni_] = len(skin_of)
+                                    if ni_ in skin_of:
+                                        ws.append((skin_of[ni_], w_))
+                            sk.append(ws)
+                        if not any(sk):
+                            sk = None
+                except struct.error:
+                    sk = None
             for corners in faces:
-                for a in range(1, len(corners) - 1):           # a fan over the polygon
-                    for pi, ni, ci, ti in (corners[0], corners[a], corners[a + 1]):     # position, normal, colour, uv
+                for tri in strip(corners):                     # each face is a triangle strip
+                    for pi, ni, ci, ti in tri:                 # position, normal, colour, uv
+                        ws = (sk[pi] if sk and pi < len(sk) else [])[:3]
+                        ws = ws + [(0, 0.0)] * (3 - len(ws))
+                        g[4].extend(j for j, _ in ws)
+                        g[5].extend(w for _, w in ws)
                         g[0].extend(mat_mul_point(W, P[pi]) if pi < len(P) else (0, 0, 0))
                         g[1].extend(mat_mul_dir(W, N[ni]) if ni < len(N) else (0, 1, 0))
                         u, v = T[ti] if ti < len(T) else (0, 0)
@@ -258,6 +358,16 @@ def model(z, tpl_data, tpl_off, anim=None):
             png = hp2.tpl_png(tpl_data, w, h, fmt, off)
             bitmaps.append(dict(name=tex_names[i] if i < len(tex_names) else '', w=w, h=h,
                                 png=base64.b64encode(png).decode() if png else ''))
+    for b in bitmaps if not ddr2 else []:               # monitor.tga left plain white: the stage's movie screen
+        if b['name'].lower().startswith('monitor') and 'mask' not in b['name'].lower() and b.get('png') and _all_white(b['png']):
+            b['screen'] = True
+    # the video-screen rooms (STG103/104/107) also lay a strip of the screens' picture on the floor (a
+    # plain white picture with no name of its own, UVs on the bottom band of the image, faded to black by
+    # its vertex colours toward the middle): the screens' reflection
+    if not ddr2 and any(b.get('screen') for b in bitmaps):
+        for b in bitmaps:
+            if not b['name'] and b.get('png') and _all_white(b['png']):
+                b['screen'] = True
     attrs, out_mats = [], []
     for mt in mats:
         al = []
@@ -265,46 +375,110 @@ def model(z, tpl_data, tpl_off, anim=None):
             attrs.append(dict(bitmap=mt['tex'][0], wrapS=1, wrapT=1))
             al = [len(attrs) - 1]
         b2 = mt['flags'][2] if len(mt['flags']) > 2 else 0
-        # (0x81 / 0x83 parts are see-through: drawn blended by their texture's alpha)
-        # 0x83: cut-out (alpha-tested, writes depth); 0x81: a glow, added by its texture's alpha
-        out_mats.append(dict(color=mt['color'], vtx=1, alpha=0.4 if b2 == 0x81 else 1.0, flags=16 if b2 == 0x81 else 0, attrs=al,
-                             cut=0.5 if b2 == 0x83 else None, addAlpha=b2 == 0x81))
+        om = dict(color=mt['color'], vtx=1, alpha=0.4 if b2 == 0x81 else 1.0, flags=16 if b2 == 0x81 else 0, attrs=al,
+                  cut=0.5 if b2 == 0x83 else None, addAlpha=b2 == 0x81, blend=b2 in (1, 3))
+        raw = mt.get('raw') or b''
+        if ddr2 and len(raw) >= 32:
+            # DDR II's material record, as main.dol's model renderer (0x8014fac8) uses it:
+            # +0 material RGBA, +4 ambient RGBA, +16 lit, +18 blend kind (low 7 bits; bit 7: alpha test
+            # at 0 instead of 160), +19 special shader, +31 texture scroll (see DDR2_SPEC.md)
+            # +40 (s16) tag: 11-90 = light channel (tag - 11) // 10 (0x8004d77c); 91-100 = its textures show
+            # the stage's movie (0x8004d91c -> 0x8014e8d0 replaces them with the movie player's picture)
+            tag = struct.unpack_from('>h', raw, 40)[0] if len(raw) >= 42 else 0
+            # the model loader (0x8014c6cc) sets the colours to white when byte +23 is set (the low byte of
+            # the +20 light-mask word: 1 in nearly every stage material); otherwise, with the global flag
+            # at r13-31336 set (1 in the Dolphin dumps), it scales them by 255 / 149
+            if raw[23]:
+                cm, ca = [255, 255, 255, 255], [255, 255, 255, 255]
+            else:
+                sc = lambda c: [min(255, int(v * 255 / 149)) for v in c[:3]] + [255]
+                cm, ca = sc(raw[0:4]), sc(raw[4:8])
+            om['gx'] = dict(mat=cm, amb=ca, lit=raw[16], kind=raw[18] & 0x7F,
+                            a0=raw[18] >> 7, sh=raw[19], tag=tag, movie=1 if 91 <= tag <= 100 else 0)
+            # the texture flipbook (0x801576fc): the shown texture is the first in the list whose frame
+            # time is past the material's clock (60 a second, wrapped at the last time)
+            ta, tt = mt.get('texall') or [], mt.get('times') or []
+            if len(tt) > 1 and len(ta) >= len(tt) and all(t < len(bitmaps) for t in ta[:len(tt)]):
+                fa = []
+                for t in ta[:len(tt)]:
+                    attrs.append(dict(bitmap=t, wrapS=1, wrapT=1))
+                    fa.append(len(attrs) - 1)
+                om['gx']['flip'] = dict(a=fa, t=tt)
+            # the texture scroll (raw +31 set; 0x8015713c into the texture matrix 0x80157fe4 loads):
+            # offset (-u speed, v speed) * 60 * seconds, or the +60 keys (time, u, v) when present
+            if raw[31] and 'speed' in mt:
+                ks = mt.get('keys')
+                om['gx']['scroll'] = dict(speed=mt.get('speed') or [0, 0], keys=ks or None)
+        out_mats.append(om)
     if not out_mats:                                     # effect placeholders with no materials: nothing to draw
         groups, moving = {}, {}
 
     def mesh_list(gs):
-        return [dict(mat=min(mid, max(0, len(out_mats) - 1)), n=len(g[0]) // 3, pos=b64f(g[0]), nrm=b64f(g[1]),
-                     uv=b64f(g[2]), col=b64u8(g[3])) for mid, g in gs.items() if g[0]]
+        out = []
+        for mid, g in gs.items():
+            if not g[0]:
+                continue
+            e = dict(mat=min(mid, max(0, len(out_mats) - 1)), n=len(g[0]) // 3, pos=b64f(g[0]), nrm=b64f(g[1]),
+                     uv=b64f(g[2]), col=b64u8(g[3]))
+            if skin_of and any(g[5]):
+                e['sj'], e['sw'] = b64f(g[4]), b64f(g[5])
+            out.append(e)
+        return out
     objs = [dict(name='mesh%d' % mid, type=2, flags=0, parent=-1, pos=[0, 0, 0], rot=[0, 0, 0], scl=[1, 1, 1],
                  mesh=mesh_list({mid: g})) for mid, g in groups.items() if g[0]]
     # animated nodes: their own object, moved by the ZAB's position / rotation / scale keys
     tracks = []
+    # (an animated node under another animated node - the island's tonearm: DRAW04_hari02 under
+    # DRAW03_hari01 - moves with it; under a still node it gets that node's matrix as 'pre')
+    obj_of = {ni: len(objs) + k for k, ni in enumerate(moving)}
     for i, gs in moving.items():
         name = nodes[i]['name']
         tr = an[name]
-        T, R, Sc = tr.get(0) or [(0, 0, 0, 0)], tr.get(1) or [(0, 0, 0, 0, 1)], tr.get(2) or [(0, 1, 1, 1)]
-        objs.append(dict(name=name, type=2, flags=0, parent=-1, pos=list(T[0][1:4]), rot=quat_euler(*R[0][1:5]),
-                         scl=list(Sc[0][1:4]), mesh=mesh_list(gs)))
+        T, R, Sc = tr.get(0) or [(0,) + tuple(nodes[i]['m'][12:15])], tr.get(1) or [(0, 0, 0, 0, 1)], tr.get(2) or [(0, 1, 1, 1)]
+        pa = nodes[i]['parent']
+        o = dict(name=name, type=2, flags=0, parent=obj_of.get(pa, -1), pos=list(T[0][1:4]), rot=quat_euler(*R[0][1:5]),
+                 scl=list(Sc[0][1:4]), mesh=mesh_list(gs))
+        if pa not in obj_of and 0 <= pa < len(nodes) and pa != i:
+            pw = wm(pa)
+            if any(abs(a - b) > 1e-6 for a, b in zip(pw, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])):
+                o['pre'] = [round(v, 6) for v in pw]
+        objs.append(o)
         def add(ch, keys):
             if len(keys) > 1 and len(set(round(v, 4) for _, v in keys)) > 1:
                 tracks.append(dict(type=2, target=name, param=0, ch=ch, curve=1, keys=[x for k in keys for x in k]))
         for c in range(3):
             add(8 + c, [(k[0], k[1 + c]) for k in T])
             add(0x1f + c, [(k[0], k[1 + c]) for k in Sc])
-        eul = [(k[0], quat_euler(*k[1:5])) for k in R]
-        for c in range(3):                               # keep the angles continuous across +-180
-            keys, prev = [], None
-            for f, e in eul:
-                v = e[c]
-                if prev is not None:
-                    while v - prev > 180:
-                        v -= 360
-                    while v - prev < -180:
-                        v += 360
-                keys.append((f, v)); prev = v
-            add(0x1c + c, keys)
+        # the rotation keys are quaternions, played by the shortest turn between keys (a spinning part -
+        # the boss island's record - turns past 180 between keys): sampled every 10 degrees or less, and
+        # each sample's angles chosen from the two equivalent X/Y/Z sets to follow on from the last one
+        eul = euler_track(R)
+        for c in range(3):
+            add(0x1c + c, [(f, e[c]) for f, e in eul])
     motion = dict(len=(anim or {}).get('len', 0), tracks=tracks) if tracks else None
-    return dict(objects=objs, materials=out_mats, attrs=attrs, bitmaps=bitmaps, motion=motion)
+    out = dict(objects=objs, materials=out_mats, attrs=attrs, bitmaps=bitmaps, motion=motion)
+    if skin_of:
+        # the skinning nodes and their parents: each one's own matrix in the file and the ZAB's position /
+        # rotation / scale keys for it, parents first (vertex = sum of weight x node's world now x
+        # inverse(its world in the file) x position)
+        chain, order = {}, []
+
+        def add_node(ni_):
+            if ni_ in chain:
+                return chain[ni_]
+            pa = nodes[ni_]['parent']
+            pk = add_node(pa) if 0 <= pa < len(nodes) and pa != ni_ else -1
+            tr = an.get(nodes[ni_]['name'], {})
+            chain[ni_] = len(order)
+            order.append(dict(name=nodes[ni_]['name'], parent=pk, m=[round(v, 6) for v in nodes[ni_]['m']],
+                              T=[list(k) for k in tr.get(0, [])], R=[list(k) for k in tr.get(1, [])],
+                              S=[list(k) for k in tr.get(2, [])]))
+            return chain[ni_]
+        slots = [None] * len(skin_of)
+        for ni_, slot in skin_of.items():
+            slots[slot] = add_node(ni_)
+        out['skin'] = dict(len=(anim or {}).get('len', 0), nodes=order, slots=slots)
+    return out
 
 
 def cameras(d, b):
@@ -337,7 +511,35 @@ def cameras(d, b):
     return out
 
 
-def stage(path):
+def _all_white(png):
+    """is this picture plain white? (our own PNGs: RGBA, filter 0 on every row - see hp.png; no PIL,
+    which the player's PC may not have)"""
+    try:
+        import base64
+        import zlib
+        raw = base64.b64decode(png) if isinstance(png, str) else png
+        p, idat, w = 8, b'', 0
+        while p + 8 <= len(raw):
+            n = struct.unpack_from('>I', raw, p)[0]
+            t = raw[p + 4:p + 8]
+            if t == b'IHDR':
+                w = struct.unpack_from('>I', raw, p + 8)[0]
+            elif t == b'IDAT':
+                idat += raw[p + 8:p + 8 + n]
+            p += 12 + n
+        px = zlib.decompress(idat)
+        row = 1 + w * 4
+        for y in range(len(px) // row):
+            r = px[y * row + 1:(y + 1) * row]
+            for i in range(0, len(r), 4):
+                if r[i] < 250 or r[i + 1] < 250 or r[i + 2] < 250:
+                    return False
+        return w > 0
+    except Exception:
+        return False
+
+
+def stage(path, ddr2=False):
     """every ZMB in the stage with its TPL -> {models, cameras, spots}"""
     d = open(path, 'rb').read()
     top = wii_entries(d)
@@ -345,9 +547,39 @@ def stage(path):
         return dict(models=[], cameras=[], spots={})
     parts = wii_entries(d, top[0][1])
     models = []
+    # DDR II names its parts: DRAW_ (the stage), BG_ (the background), COL_ (not drawn: it holds the
+    # spots - EFF_, LIGPOS_, LIGTAR_, OBJSET_<prop>_nn), OBJA_ / OBJB_<x>_<prop>_<suffix> (props, drawn
+    # at each OBJSET_<prop>_nn spot)
+    objset = {}
+    for name, off, size in parts:
+        if d[off:off + 4] == b'ZMB ' and name.startswith('COL_'):
+            try:
+                nodes = Zmb(d[off:off + size]).nodes()
+            except Exception:
+                continue
+            world = {}
+
+            def wm(i):
+                if i not in world:
+                    nd = nodes[i]
+                    w = nd['m']
+                    if 0 <= nd['parent'] < len(nodes) and nd['parent'] != i:
+                        w = mat4mul(w, wm(nd['parent']))
+                    world[i] = w
+                return world[i]
+            for i, nd in enumerate(nodes):
+                if nd['name'].startswith('OBJSET_'):
+                    key = nd['name'][7:].rsplit('_', 1)[0]
+                    objset.setdefault(key, []).append([round(v, 5) for v in wm(i)])
     for i, (name, off, size) in enumerate(parts):
         if d[off:off + 4] != b'ZMB ':
             continue
+        if name.startswith('COL_'):
+            continue
+        inst = None
+        if name.startswith(('OBJA_', 'OBJB_')):
+            bits = name.split('_')
+            inst = objset.get('_'.join(bits[2:-1])) if len(bits) > 3 else None   # (no spot: drawn where it is)
         tpl, anim = None, None
         for nm2, o2, s2 in parts[i + 1:i + 3]:          # its textures (and animation) come right after it
             if d[o2:o2 + 4] == b'\x00\x20\xaf\x30' and tpl is None:
@@ -360,7 +592,15 @@ def stage(path):
             elif d[o2:o2 + 4] == b'ZMB ':
                 break
         try:
-            models.append(model(d[off:off + size], d if tpl is not None else None, tpl or 0, anim))
+            md = model(d[off:off + size], d if tpl is not None else None, tpl or 0, anim, ddr2)
+            md['name'] = name
+            if inst:
+                md['inst'] = inst
+                # (a prop's plain white texture is where the game shows a movie: movieBox, pv screens)
+                for b in md['bitmaps'] if not ddr2 else []:
+                    if b.get('png') and _all_white(b['png']):
+                        b['screen'] = True
+            models.append(md)
         except (struct.error, ValueError, IndexError):
             continue
     cams = cameras(d, top[1][1]) if len(top) > 1 else []
@@ -375,3 +615,78 @@ if __name__ == '__main__':
         print('model', k, 'objects', len(m['objects']), 'tris', sum(g['n'] // 3 for o in m['objects'] for g in o['mesh']),
               'materials', len(m['materials']), 'textures', [(b['name'], b['w'], b['h'], bool(b['png'])) for b in m['bitmaps']])
     print('KB', len(json.dumps(s)) // 1024)
+
+
+def ddr2_cameras(path):
+    """DDR II's own gameplay camera moves (game/GAME_DEF_CAM.bin): three WII groups (86 / 48 / 22 moves).
+    Each move: f32 length in seconds, then six tracks (key count, offset) laid out like HP2's '@@'
+    blocks: 0 eye (t, x, y, z), 2 field of view (t, deg), 3 the point looked at (t, x, y, z).
+    The game asks its camera manager for a move by code (main.dol 0x8005c540): 1xx/2xx/3xx a set one,
+    700/800/900 a random one; here every move is available to the random pick."""
+    d = open(path, 'rb').read()
+    out = []
+    for gi, (nm, go, gs) in enumerate(wii_entries(d)):
+        if d[go:go + 4] != b'WII\0':
+            continue
+        for n2, o, s2 in wii_entries(d, go):
+            try:
+                ln = struct.unpack_from('>f', d, o)[0]
+                tr = [struct.unpack_from('>II', d, o + 4 + 8 * i) for i in range(6)]
+
+                def keys(k, size):
+                    n, off = tr[k]
+                    return [list(struct.unpack_from('>%df' % (size // 4), d, o + off + size * j)) for j in range(min(n, 4096))]
+                eye, fov, at = keys(0, 16), keys(2, 8), keys(3, 16)
+                if eye and at and 0.1 < ln < 60:
+                    out.append(dict(hp2=True, ddr2=True, group=gi, len=ln, eye=eye, at=at, fov=fov or [[0, 60]], far=100000.0))
+            except struct.error:
+                pass
+    return out
+
+
+def intro_cameras(path):
+    """the boss stage's opening camera moves: STGnnn's second WII entry, the STG201_CAM00_0n.cam moves
+    (f32 length in seconds, then the same six tracks as GAME_DEF_CAM): 3 s + 4 s + 3 s, played in turn"""
+    d = open(path, 'rb').read()
+    top = wii_entries(d)
+    if len(top) < 2:
+        return []
+    out = []
+    for nm, o, s2 in wii_entries(d, top[1][1]):
+        if d[o:o + 4] == b'WII\0' or s2 < 0x40:
+            continue
+        try:
+            ln = struct.unpack_from('>f', d, o)[0]
+            tr = [struct.unpack_from('>II', d, o + 4 + 8 * i) for i in range(6)]
+
+            def keys(k, size):
+                n, off = tr[k]
+                return [list(struct.unpack_from('>%df' % (size // 4), d, o + off + size * j)) for j in range(min(n, 4096))]
+            eye, fov, at = keys(0, 16), keys(2, 8), keys(3, 16)
+            if eye and at and 0.1 < ln < 60:
+                out.append(dict(hp2=True, ddr2=True, name=nm, len=ln, eye=eye, at=at, fov=fov or [[0, 45]]))
+        except struct.error:
+            pass
+    return out
+
+
+def appeal_cameras(path):
+    """the combo performance's camera moves (game/GAME_APL_CAM0n.bin, n = the song's style + 1): ten
+    moves in a WII container, one per combo motion (GAME_APL_MOT01's clips: types 0-4 x 2) - lengths
+    1, 1, 2, 2, 3, 3, 3, 3, 1.67, 1.67 s, matching the clips' 60-180 frames; the same move format as
+    GAME_DEF_CAM (f32 length, six tracks: 0 eye, 2 field of view, 3 the point looked at)"""
+    d = open(path, 'rb').read()
+    out = []
+    for nm, o, s2 in wii_entries(d):
+        try:
+            ln = struct.unpack_from('>f', d, o)[0]
+            tr = [struct.unpack_from('>II', d, o + 4 + 8 * i) for i in range(6)]
+
+            def keys(k, size):
+                n, off = tr[k]
+                return [list(struct.unpack_from('>%df' % (size // 4), d, o + off + size * j)) for j in range(min(n, 4096))]
+            eye, fov, at = keys(0, 16), keys(2, 8), keys(3, 16)
+            out.append(dict(hp2=True, ddr2=True, len=ln, eye=eye, at=at, fov=fov or [[0, 45]], far=100000.0) if eye and at and 0.1 < ln < 60 else None)
+        except struct.error:
+            out.append(None)
+    return out

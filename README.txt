@@ -21,8 +21,8 @@ Keys (default)
   Player options: SPEED, APPEARANCE, ROTATE (turn), ARROW (colors), FREEZE ARROW, JUMP (OFF = no
   jumps), CUT (ON = quarter-note steps only), GUIDELINE (measure lines), EVALUATION (show judgment
   and combo), MARVELOUS, N.G. COMBO (OFF like the real DDR II), GAME OVER (NORMAL / OFF).
-  GAME PLAY: style, GAME LEVEL (MEDIUM is the game's own Dance Gauge; EASY/HARD/VERY HARD scale it -
-  an approximation), announcer voice, song unlocks. GRAPHIC: song videos, video size, screen shape,
+  GAME PLAY: style, GAME LEVEL (the game's own 8 Dance Gauge levels from its code, EASIEST to HARDEST;
+  MEDIUM is the game's default), announcer voice, song unlocks. GRAPHIC: song videos, video size, screen shape,
   full screen. DANCE: the dancer and your own dancer model. SOUND: menu sounds/music, audio timing
   offset (raise it if the arrows feel early). Plus Custom songs, Player data, Controls, Dance mats,
   Game folder.
@@ -57,6 +57,9 @@ Options
   Gauge (Normal/No fail), Song videos, Video size (Wii monitor beside the arrows, or full
   screen), Screen shape (16:9 or 4:3), Full screen, Announcer, Menu sounds, Menu music, Song unlocks,
   Audio offset (ms): if the arrows feel early, raise it; if late, lower it.
+  Frame rate (Options > SCREEN): MONITOR (one frame per screen refresh), 60 FPS (like the Wii) or
+  120 FPS (needs a 120 Hz screen). Timing and judging don't change with it.
+  FPS counter: Options > SCREEN > FPS COUNTER, or press F3 any time.
 
 Players (user data)
   Like the game's user data, each player has their own name, DDR points, records and play
@@ -125,10 +128,13 @@ Records and DDR points
   difficulties and better grades) plus the game's "Any song" challenge bonuses.
   Song unlocks are built in but OFF. Turn on "Song unlocks (DDR points)" in Options to use the
   game's own unlock schedule: Diamond Night at 15,000 points, Summer Fairytale at 60,000, and so
-  on up to DanceDanceRevolution at 2,000,000 (from RemyWiki). Outfits and Mii parts on that list
+  on up to DanceDanceRevolution at 1,995,000 (read from the game's own unlock table). Outfits and Mii parts on that list
   aren't in DDR II PC but still show as the next goal. Turning it off shows every song again.
 
 Timing and scoring (read from the game's own code)
+  The timing table has five rows. In normal play (dance mat or keys) steps use row 0; the
+  game's other rows are for its other controllers and modes (a late-leaning one for the Wii
+  Remote style inputs, a very forgiving one), so DDR II PC uses row 0 like the mat.
   Windows, in 1/150 s ticks (early / late):
     Marvelous -2/+2 (13 ms), Perfect -6/+7 (40/47 ms), Great -16/+15 (107/100 ms),
     Good -25/+30 (167/200 ms). Anything not hit by +200 ms is a BOO.
@@ -295,9 +301,11 @@ GAME MODES (SELECT MODE)
                              songs as usual with a calorie counter at the top of the screen and the
                              running total on the song select. Reaching the target, or Esc on the song
                              select, ends the workout: WORKOUT RESULTS, and it goes in your WORKOUT LOG.
-                             Calories are an estimate from your weight, the time danced and the steps
-                             you hit (the games don't say how they count theirs): a busy 2-minute song
-                             at 60 kg is about 13 kcal.
+                             Calories use DDR II's own rule, read from its code: 0.165 x 1.05 x your
+                             weight x MET x hours danced (MET 3.1 on BASIC, 3.5 on the other
+                             difficulties), shared out over the song's steps as you dance them. A
+                             2-minute song at 60 kg is about 1.2 kcal. (The game keeps thousandths of a
+                             kcal; how its screen rounds them isn't decoded, so this shows kcal.)
     TRAINING MODE            (HP2, HP3, DDR II) pick a song, then its TRAINING settings: SPEED
                              (50-150%: the music and arrows together), FROM / TO MEASURE (just the part
                              you want), REPEAT (the part starts again by itself until you press Esc)
@@ -309,36 +317,52 @@ GAME MODES (SELECT MODE)
                              play on BEGINNER and can't fail; a lesson you clear shows its grade in
                              the list. For now the gimmick and hand lessons play their arrows as
                              normal arrows (no gimmicks, no hand markers).
-    GROOVE CIRCUIT           (Hottest Party) the story mode: nine venues, INCEPTION, GENESIS, TECTONIC,
-                             HALLUMINATION, ERU, SYSTRONIX, STARGAZE, U-MATIC and EV. Each venue has the
-                             crowd's requests and a VENUE MASTER battle. The requests' wording is read
-                             from your disc, and the rules come from that wording: how many songs, the
-                             difficulty, and the grade, combo, score or 'Boo' limit. Venues open like the
-                             game: INCEPTION first, then four, then three more after four venues, then EV.
-                             Clearing EV starts round 2 with the harder requests.
+    TOURNAMENT               (DDR II) the game's own TOURNAMENT MODE, read from its code (main.dol): 4
+                             stages of 8 requests, with the game's songs, difficulty and goals (Dance
+                             Gauge %, MAX COMBO, PERFECT, GREAT, MISS, rank) and its wording
+                             (text_eng.bin). Each stage: requests, two dancer battles (one of the
+                             dancer's songs, then one of yours) and a final (the opponent's song, two
+                             competition songs and one of yours). Winning a stage's final opens the
+                             next stage. "Clear N of the specified songs" lets you pick which.
+                             The dancers' songs follow the game's rule (its code at 0x800de780): each
+                             stage has four song lists - battle 1, battle 2, the final opponent's, and
+                             the final's two competition songs - and a song is picked at random from
+                             its list. Still estimated: the opponents' scores (a target that rises stage
+                             by stage, like the other story modes). GIMMICK arrows aren't in yet, so that request plays normally.
+                             Specified songs this copy can't play (the tutorial's lesson songs) become
+                             songs of your choice.
+    GROOVE CIRCUIT           (Hottest Party) the story mode, read from the game itself:
+                             - the request table in sys/main.dol (2 rounds x 9 venues x 3 slots): each
+                               request's songs of your choice or designated songs, its Venue Master's
+                               song, difficulty, and the grade, score, combo or 'Boo' limit;
+                             - the requests' wording from mess/messdata_eng.bin.
+                             Venues: INCEPTION, GENESIS, TECTONIC, HALLUMINATION, ERU, SYSTRONIX,
+                             STARGAZE, U-MATIC and EV. They open like the game: INCEPTION first, then
+                             four, then three more after four venues, then EV. Clearing EV starts round 2.
                              "Clear N songs" requests: pick the songs yourself (only Hottest Party songs
-                             count; Esc gives up). "Designated" requests and Venue Masters play their own
-                             songs: pick the difficulty with Left/Right first. The Venue Master's score
-                             climbs through the song in the top corner, and you have to finish above it.
-                             (A share of the chart's top score that rises venue by venue: the real
-                             master's rule isn't known.) Round 1's songs and unlocks are the real game's;
-                             round 2's designated songs aren't in the disc's text, so they're picked from
-                             the songs the real round 2 uses. Every song and stage is already open here,
-                             so "Unlocks" just says what the real game would unlock.
-    GROOVE ARENA             (Hottest Party 2) the story mode, read from the game itself: the request
-                             table in sys/main.dol (2 rounds x 11 arenas x 3 requests) gives each
-                             arena's requests, their type, difficulty and limit (gauge, GREAT/PERFECT,
-                             grade, score, combo, Boo), the designated songs, and each opponent dancer's
-                             character and COM level; the requests' wording comes from text_eng.bin.
-                             Arenas open in the game's order: FIRST ARENA; GET-A-GO-GO, ARENA SHIFT and
-                             FUNKTION JUNCTION; GROOVE BY GROOVE, WONDERLAND and DANCETERIA; PINNACLE
-                             (three battles); EXPOSURE (the dance group); then two hidden venues. That
-                             opens ROUND 2 (Left/Right on the arena list).
-                             Still estimated: the songs inside the designated courses (the game names
-                             them by number; their lists aren't decoded yet), and how the COM dancers
-                             score (their level is the game's; the score they reach is an estimate
-                             that rises with it). The first arena and the hidden venues aren't named in
-                             the text.
+                             count; Esc gives up). Designated songs and Venue Masters: pick the
+                             difficulty with Left/Right first.
+                             Still estimated: the Venue Master's score (a share of the chart's top score
+                             that rises venue by venue), and "Unlocks" (taken from RemyWiki; everything
+                             is open here anyway).
+    GROOVE ARENA             (Hottest Party 2) the story mode, read from the game itself:
+                             - the request table in sys/main.dol (2 rounds x 11 arenas x 3 requests):
+                               each request's type, difficulty and limit (gauge, GREAT/PERFECT, grade,
+                               score, combo, Boo), its designated songs, and each opponent dancer
+                               (character and costume);
+                             - the course table in sys/main.dol: the 20 courses' songs (3 or 4 each);
+                             - the arena names from their name plates in select/select_bin.bin;
+                             - the requests' wording from text/text_eng.bin.
+                             Arenas open in the game's order: INCEPTION ARENA; GET-A-GO-GO, ARENA SHIFT
+                             and FUNKTION JUNCTION; GROOVE BY GROOVE, WONDERLAND and DANCETERIA;
+                             PINNACLE (three battles); EXPOSURE (the dance group); then OVER-EXPOSURE 1
+                             and 2. That opens ROUND 2 (Left/Right on the arena list).
+                             "Clear 1 course" requests: pick one of the five courses the game never
+                             designates in that round (courses 1-5 / 11-15).
+                             Still estimated: how the opponent dancers score. The game's table gives
+                             each opponent's character and costume, but how it decides their score
+                             isn't decoded yet, so their score is an estimate that rises arena by
+                             arena (higher in round 2, a little higher for dance groups).
   Still to come, in this order: DDR II and Hottest Party 3's Tournament, gimmick arrows and hand markers.
 
 HOTTEST PARTY 3
