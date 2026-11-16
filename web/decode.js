@@ -61,7 +61,9 @@ function decodeRWAV(dv, u8, base) {
     dspDecode(u8, data0 + doff, n, readCoefs(dv, wi + aoff), out, 0, 0, 0);
     chans.push(out);
   }
-  return { rate, chans };
+  // a looped sound (crowd cheers) loops from its loop start (in nibbles, 14 samples per 16) to the end
+  const looped = dv.getUint8(wi + 1) === 1, ls = dv.getUint32(wi + 8);
+  return { rate, chans, loop: looped, loopStart: looped ? Math.max(0, Math.floor(ls / 16) * 14 + ls % 16 - 2) : 0 };
 }
 
 // BRSTM (previews) -> {rate, chans, loopStart}
@@ -181,7 +183,9 @@ DDR.parseSS4 = function (buf) {
       const fbase = (base + n + 3) & ~3;          // (flags are 4-byte aligned; 0x100 = freeze end)
       for (let i = 0; i < n; i++) {
         const flag = dv.getUint32(fbase + 4 * i);
-        notes.push({ off: dv.getInt32(p + 12 + 4 * i, true), lane: dv.getUint8(base + i), end: flag !== 0 });
+        // (DDR II PC's lesson charts mark the foot in the top bits: 1 left, 2 right - the server's lesson_chart)
+        const foot = flag >>> 28;
+        notes.push({ off: dv.getInt32(p + 12 + 4 * i, true), lane: dv.getUint8(base + i), end: (flag & 0x0fffffff) !== 0, foot: foot || undefined });
       }
       out.charts[p2] = notes;
     }
@@ -233,6 +237,7 @@ DDR.buildNotes = function (ss4, key) {
       }
     }
     const n = { off: r.off, t: timing.timeOf(r.off), lane: r.lane };
+    if (r.foot) n.foot = r.foot;
     notes.push(n);
     lastInLane[r.lane] = n;
   }

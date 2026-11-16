@@ -1,6 +1,6 @@
 {
  "profiles": {
-  "JOHN": {
+  "J": {
    "points": 0,
    "records": {},
    "opts": {
@@ -26,15 +26,14 @@
     "pts": 0,
     "i": [
      0,
-     70,
+     129,
      0,
      0,
      0,
      0
     ]
-   },
-   "orders": []
+   }
   }
  },
- "current": "JOHN"
+ "current": "J"
 }

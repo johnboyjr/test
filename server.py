@@ -464,7 +464,7 @@ class Game:
         if not 1 <= slot <= 200:
             return []
         try:
-            ptr = struct.unpack('>I', self.dol.bytes(0x802A44A8 + 412 * slot + 16, 4))[0]
+            ptr = struct.unpack('>I', self.entry(slot)[16:20])[0]     # (record = slot - 1, like entry())
             if not 0x80000000 <= ptr < 0x81800000:
                 return []
             out = []
@@ -507,7 +507,7 @@ class Game:
             return 19
         if not 1 <= slot <= 200:
             return None
-        b = self.dol.bytes(0x802A44A8 + 412 * slot, 12)
+        b = self.entry(slot)[:12]                    # (record = slot - 1: a song's full and cut slots share data)
         flags, st = struct.unpack_from('>Ii', b, 4)
         if st != -1:
             return st

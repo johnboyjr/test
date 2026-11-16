@@ -349,12 +349,49 @@ const A = { ready: false, tpl: {}, img: {}, sfx: {} };
       // MENU METRONOME MOVIES MUSIC-SPEED PARTY PLAYER1-4 SAVE SONG TIMING TIMING-EVALUATION VOICE COMBO ...
       small: (await imgs('sel', '/10/9', [...Array(30).keys()])).map(trim),
     };
+    // SELECT MODE (select_bin group 0), SELECT NUMBER OF PLAYERS / SELECT STYLE (group 1), record data (group 9)
+    A.menu = {
+      modeCard: await imgs('sel', '/0/1/0/0', [0, 1, 2, 3]),                      // numbered gradient cards 1-4
+      modeSil: await Promise.all([1, 2, 3, 4].map(k => img('sel', `/0/1/0/${k}`, 0))),  // the card's dancer shape
+      modeCardName: await imgs('sel', '/0/1/0/5', [0, 1, 2, 3]),
+      selectMode: trim(await img('sel', '/0/2/0/0', 0)),
+      modeName: await imgs('sel', '/0/2/0/1', [0, 1, 2, 3]),
+      modeHelp: await imgs('sel', '/0/2/0/2', [0, 1, 2, 3]),
+      dancer: await Promise.all([3, 4, 5, 6].map(k => img('sel', `/0/${k}/0/0`, 0))),
+      dancerSil: await Promise.all([3, 4, 5, 6].map(k => img('sel', `/0/${k}/0/1`, 0))),
+      playersTitle: trim(await img('sel', '/1/0/0/0', 0)), helpWin: await img('sel', '/1/0/0/1', 0),
+      titleWin: await img('sel', '/1/0/0/3', 0),
+      // 1 player, 2, 3, 4 players, SYNC. GUEST, NORMAL, FRIENDSHIP, SYNC, DOUBLE
+      cards: await imgs('sel', '/1/1/0/0', [0, 1, 2, 3, 4, 5, 6, 7, 8]), cardOn: await img('sel', '/1/1/0/1', 0),
+      dataTitle: trim(await img('sel', '/13/0/0/3', 0)), dataBtn: await imgs('sel', '/9/4/0/2', [0, 1]),
+      // SELECT RECORD DATA (group 13): record button, GUEST / EDIT, the orange highlight frames, player badges
+      recBtn: await img('sel', '/13/1/0/2', 0), recOn: await img('sel', '/13/1/0/3', 0),
+      guestEdit: await imgs('sel', '/13/2/0/2', [0, 1]), geOn: await img('sel', '/13/2/0/3', 0),
+      badges: await imgs('sel', '/13/1/0/0', [0, 1, 2, 3]), titleBar: await img('sel', '/11/1/0/0', 0),
+    };
+    // DDR SCHOOL's SELECT LESSON (select_bin group 11): lesson name plates, the teacher's six poses, his
+    // speech windows (grey, step, choreograph, balance board), grades E-AAA, crowns, arrows, BEGIN LESSONS
+    A.lesson = {
+      names: await imgs('sel', '/11/0/0/0', [...Array(15).keys()]),
+      teacher: (await imgs('sel', '/11/0/0/1', [0, 1, 2, 3, 4])).concat([await img('sel', '/11/0/0/2', 0)]),
+      wind: await imgs('sel', '/11/0/0/3', [0, 1, 2, 3]),
+      grades: await imgs('sel', '/11/0/0/4', [0, 1, 2, 3, 4, 5, 6]),
+      arrow: await img('sel', '/11/0/0/5', 0), crowns: await imgs('sel', '/11/0/0/7', [0, 1, 2, 3]),
+      titleBar: await img('sel', '/11/1/0/0', 0), title: trim(await img('sel', '/11/1/0/1', 0)),
+      begin: await img('sel', '/11/3/0/0', 0), beginOn: await img('sel', '/11/3/0/1', 0),
+    };
+    // comAF: the italic number set (0-9, then ':' '.' '-' '/' ...) and the button-hint bar pictures
+    A.num28 = await imgs('af', '/0/0/0', [...Array(28).keys()]);
+    A.hints = await imgs('af', '/1/0/0', [...Array(54).keys()]);
     // song select (light blue screen) pieces
     A.img.bgShapes = await imgs('scm', '/0/1', [4, 5, 7, 8]);        // filled circle, ring, thick ring, striped circle
     A.img.headerBar = await img('mus', '/0/7/0/1', 0);
     A.img.magenta = await img('mus', '/0/5/0/0', 0);
     A.img.jacketHi = await img('mus', '/0/3/0/1', 0);
     A.img.diffPanel = await img('mus', '/0/1/0/22', 0);
+    // SELECT DIFFICULTY player markers (sel_1p-4p, selMusic /0/10/0/4: player n's badge at slot n with its
+    // coloured line back to the button)
+    A.img.selMarks = await imgs('mus', '/0/10/0/4', [0, 1, 2, 3]);
     A.img.gradeSmall = await imgs('mus', '/0/1/0/18', [0, 1, 2, 3, 4, 5, 6]);   // AAA AA A B C D E
     A.img.crowns = await imgs('mus', '/0/1/0/19', [0, 1, 2, 3]);
     // gameplay meter (top panel above the arrows)
@@ -362,6 +399,45 @@ const A = { ready: false, tpl: {}, img: {}, sfx: {} };
     A.img.meterGauge = await img('mfm', '/0/5', 0);
     A.img.meterBadge = await img('mfm', '/0/10', 0);
     A.img.meterBadge2 = await img('mfm', '/0/10', 1);
+    // per player (METER_FM_US.bin): panels /0/4 (0 blue, 1 red, 2 / 3 green / yellow pills, 4 pink, 5 grey),
+    // badges 1-4 /0/10, gauge frames /0/5 (0 blue, 1 red, 2 green, 3 yellow, 4 blue, 5 grey)
+    A.img.meterPanels = await imgs('mfm', '/0/4', [0, 1, 2, 3, 4, 5]);
+    A.img.meterBadges = await imgs('mfm', '/0/10', [0, 1, 2, 3]);
+    A.img.meterGauges = await imgs('mfm', '/0/5', [0, 1, 2, 3, 4, 5]);
+    // 3 / 4 players (game/METER_MULTI_US.bin: set /1 = 3 players, /2 = 4 players). Each set: /0/0 mode words
+    // (NORMAL, SYNC, FRIENDSHIP), /0/1 STYLE plate, /0/4 panels (1 blue, 2 red, 3 green, 4 yellow), /0/5 gauge
+    // frames, /0/6 difficulty words, /0/9 DANGER!!, /0/10 badges 1-4; its CAE block holds where each goes
+    A.multi = {};
+    try {
+      const cj = await (await fetch('/api/cae/mmu')).json();
+      for (const [n, set] of [[3, 1], [4, 2]]) {
+        const P = '/' + set + '/0/';
+        A.multi[n] = {
+          words: await imgs('mmu', P + '0', [0, 1, 2]), plate: await img('mmu', P + '1', 0),
+          panels: await imgs('mmu', P + '4', [0, 1, 2, 3]), gauges: await imgs('mmu', P + '5', [0, 1, 2, 3]),
+          diffs: await imgs('mmu', P + '6', [0, 1, 2, 3, 4]), danger: await img('mmu', P + '9', 0),
+          badges: await imgs('mmu', P + '10', [0, 1, 2, 3]), cae: cj.blocks[set] && cj.blocks[set].parts,
+        };
+      }
+    } catch (e) { A.multi = {}; }
+    // FRIENDSHIP / SYNC with 3 / 4 players (game/METER_FS2_US.bin, one shared field): /0/0 words (3 SYNC,
+    // 4 FRIENDSHIP), /0/1 STYLE plate, /0/4 the pink group panel, /0/5 player panels, /0/6 group gauge,
+    // /0/7 PLAYER 1-4, /0/8 difficulty words, /0/11 DANGER!!, /0/12 group badge, /0/13 PARTY; CAE block /1
+    try {
+      const cj = await (await fetch('/api/cae/fs2')).json();
+      A.party = {
+        words: await imgs('fs2', '/0/0', [0, 1, 2, 3, 4]), plate: await img('fs2', '/0/1', 0), bar: await img('fs2', '/0/4', 0),
+        panels: await imgs('fs2', '/0/5', [0, 1, 2, 3]), gauge: await img('fs2', '/0/6', 0), tags: await imgs('fs2', '/0/7', [0, 1, 2, 3]),
+        diffs: await imgs('fs2', '/0/8', [0, 1, 2, 3, 4]), danger: await img('fs2', '/0/11', 0), box: await img('fs2', '/0/12', 0),
+        sticker: await img('fs2', '/0/13', 0), cae: cj.blocks[0] && cj.blocks[0].parts,
+      };
+    } catch (e) { A.party = null; }
+    // DDR POINTS plate and COMPLETE!! (2Dcommon/comAF_US.bin /7/0/2 and /7/0/1)
+    // the explanation screens (comAF_US.bin /5/4): 0 / 1 the side panels (107 x 480, left and right of the
+    // 640 x 480 page on the 854 x 480 screen), 4 Arrow, 5-10 STEP LESSON 1-6, 11 Freeze Arrow
+    A.img.explain = await imgs('af', '/5/4', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    A.img.ptsPlate = await img('af', '/7/0/2', 0);
+    A.img.ptsComplete = await img('af', '/7/0/1', 0);
     A.img.meterStyle = await img('mfm', '/0/1', 0);
     A.img.meterNormal = await img('mfm', '/0/0', 0);
     A.img.meterDouble = await img('mfm', '/0/0', 6);
@@ -371,6 +447,14 @@ const A = { ready: false, tpl: {}, img: {}, sfx: {} };
     A.img.resPanel1P = await img('res', '/0/0/0/1', 2);
     A.img.resPanel2P = await img('res', '/0/0/0/1', 0);     // VERSUS: 1P boxes left, 2P right
     A.img.resJacketFrame = await img('res', '/0/0/0/0', 0);
+    // 3 / 4 player RESULTS (selResult /0/1 the screen, /0/2 a player's card): jacket frame, the judgment list
+    // (multi), style words, cards (blue, red, green, yellow), PLAYER n, difficulty words, the count window
+    A.img.resMany = {
+      frame: await img('res', '/0/1/0/0', 0), list: await img('res', '/0/1/0/1', 2), titleBar: await img('res', '/0/1/0/2', 0),
+      title: await img('res', '/0/1/0/3', 0), styles: await imgs('res', '/0/1/0/4', [0, 1, 2, 3, 4, 5, 6]),
+      players: await imgs('res', '/0/2/0/0', [0, 1, 2, 3]), diffs: await imgs('res', '/0/2/0/1', [0, 1, 2, 3, 4]),
+      counts: await img('res', '/0/2/0/2', 0), cards: await imgs('res', '/0/2/0/4', [0, 1, 2, 3]),
+    };
     A.img.card = await img('sel', '/2/4/0/1', 0);
     const strips = await imgs('af', '/11', [13, 15, 17, 19, 21]);
     const cut = s => s ? [...Array(10).keys()].map(i => crop(s, i * 56, 0, 56, 56)) : null;
@@ -389,7 +473,9 @@ const A = { ready: false, tpl: {}, img: {}, sfx: {} };
 
   // ------------------------------------------------------------- sounds
   const sfxCache = new Map();
-  A.playSfx = async function (name, gain = 1) {
+  // opts.loop: a looped sound (its own loop point) that plays until stopSfx(handle, fade seconds)
+  A.playSfx = async function (name, gain = 1, opts = {}) {
+    const handle = opts.handle || { srcs: [] };
     try {
       let notes = sfxCache.get(name);
       if (!notes || name.startsWith('VO_')) {   // announcer lines pick a random take each time
@@ -411,11 +497,28 @@ const A = { ready: false, tpl: {}, img: {}, sfx: {} };
       for (const nt of notes) {
         const src = ctx.createBufferSource(), gn = ctx.createGain();
         src.buffer = nt.buf; src.playbackRate.value = nt.ratio;
+        if (opts.loop && nt.buf.loopFrom !== undefined) { src.loop = true; src.loopStart = nt.buf.loopFrom; src.loopEnd = nt.buf.duration; }
         gn.gain.value = Math.min(1.5, nt.vol * 1.6 * gain * (S.sfxVolume ?? 1));
         src.connect(gn).connect(ctx.destination);
+        if (handle.stopped) return handle;
         src.start(now + nt.t);
+        handle.srcs.push({ src, gn });
       }
     } catch (e) { /* no sound */ }
+    return handle;
+  };
+  // stop a sound started with playSfx (fading out over `fade` seconds)
+  A.stopSfx = function (handle, fade = 0) {
+    if (!handle) return;
+    handle.stopped = true;
+    const ctx = audio(), now = ctx.currentTime;
+    for (const { src, gn } of handle.srcs) {
+      try {
+        gn.gain.cancelScheduledValues(now); gn.gain.setValueAtTime(gn.gain.value, now);
+        gn.gain.linearRampToValueAtTime(0, now + Math.max(0.01, fade)); src.stop(now + Math.max(0.01, fade) + 0.05);
+      } catch (e) {}
+    }
+    handle.srcs = [];
   };
 
   // judgment-coloured hit flash
@@ -439,9 +542,49 @@ const A = { ready: false, tpl: {}, img: {}, sfx: {} };
     A.img.logoGlow = await img('ttl', '/3/0/3', 0);
     A.img.copyright = await img('ttl', '/3/0/2', 0);
   };
+  // the start-up screens and the title (logo/logo_ENG.tpl, select/selTitle_US.bin, the WARNING window from
+  // 2Dcommon/comAF_US.bin) and the game's font (font/font_us.bin: a 16 x 13 grid of 20 x 24 letters, then
+  // ten ready-made banners - WARNING!, SONG CLEARED!! ...)
+  A.loadIntro = async function () {
+    if (A.intro) return A.intro;
+    const [strap1, strap2, konami] = await imgs('logo', '', [0, 1, 2]);
+    const T = n => img('ttl', n, 0);
+    A.intro = {
+      strap: [strap1, strap2], konami,
+      dolby: await T('/1/0/0'), copy: await T('/1/0/1'), notice: await T('/1/0/2'), noticeText: await T('/1/0/3'),
+      logo: await T('/3/0/1'), copy2: await T('/3/0/2'), flare: await T('/3/0/3'), shine: await T('/3/0/4'),
+      arrow: await T('/3/0/5'), arrowGlow: await T('/3/0/6'), arrowSoft: await T('/3/0/7'),
+      ripple: [await T('/3/0/8'), await T('/3/0/9'), await T('/3/0/10')],
+      point: await T('/4/0/0'), letsDance: await T('/4/0/1'),
+      mist: await T('/5/0/0'), nebula: await T('/5/0/1'), stars: await T('/5/0/2'),
+      window: await img('af', '/4/1/0/0', 1),
+      font: await img('font', '/0', 0), banners: await imgs('font', '/0', [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
+    };
+    if (A.intro.font) A.font = buildFont(A.intro.font);
+    return A.intro;
+  };
+  // the game font: which letter is in which cell (row by row, 16 to a row; \0 = an empty cell), and each
+  // letter's inked width measured from the picture
+  const FONT_ROWS = ['0123456789*☆+−×→', '\0ABCDEFGHIJKLMNO', 'PQRSTUVWXYZ“‘[]/', '\0abcdefghijklmno',
+    'pqrstuvwxyz:%·&~', '`°,。―._#@~ËЯ=', '\0ÄÖÜßÀÁÈÉÌÍÒÓÙÚÑ', 'ÂÊËÎÏÔÛŸÿ✱Ç', '', '”’!?\u0001\u0002¿¡{};©<>',
+    '\0àâäçèéêëîïôöùûü', 'áìíòóúñŒœΦº♥$∀Δ‖', '()\0\0\0\0\0\0\0\0\0\0\0\0…▼'];
+  const FONT_ALIAS = { '-': '−', '"': '”', "'": '’', '‘': '’', '“': '”', '—': '―', '–': '−' };
+  function buildFont(atlas) {
+    const c = document.createElement('canvas'); c.width = atlas.width; c.height = atlas.height;
+    const x = c.getContext('2d'); x.drawImage(atlas, 0, 0);
+    const px = x.getImageData(0, 0, c.width, c.height).data, glyphs = {};
+    FONT_ROWS.forEach((row, r) => [...row].forEach((ch, col) => {
+      if (ch === '\0') return;
+      let lo = 20, hi = -1;
+      for (let gx = 0; gx < 20; gx++) for (let gy = 0; gy < 24; gy++)
+        if (px[((r * 24 + gy) * c.width + col * 20 + gx) * 4 + 3] > 60) { lo = Math.min(lo, gx); hi = Math.max(hi, gx); break; }
+      if (hi >= lo) glyphs[ch] = { sx: col * 20 + lo, sy: r * 24, w: hi - lo + 1 };
+    }));
+    return { atlas: c, glyphs, alias: FONT_ALIAS, tints: {} };
+  }
 
   A.load = async function () {
-    await Promise.all([arrows(), loadC8(), hud(), menus()].map(p => p.catch(e => console.warn(e))));
+    await Promise.all([arrows(), loadC8(), hud(), menus(), A.loadIntro()].map(p => p.catch(e => console.warn(e))));
     A.ready = true;
   };
 })();

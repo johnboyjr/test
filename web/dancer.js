@@ -158,7 +158,7 @@
       // the order the loop parts play in (the game picks them at random; this is fixed per song)
       let s = (seed || 1) >>> 0;
       this.rand = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
-      this.loops = [];
+      this.loops = []; this.parts = {};
       // joint directions in each parent's space, from the dance data
       const c0 = data.S[0] || data.L[0][0];
       this.dir = {};
@@ -167,30 +167,130 @@
       this.ref = null;
       this.ref = this.solve(this.local(0, 1e9), true);
     }
-    clipFor(measure, endMeasure) {
-      const d = this.d;
-      if (measure >= endMeasure && d.E.length) return d.E[Math.min(d.E.length - 1, measure - endMeasure)];
-      if (measure < d.S.length) return d.S[measure];
-      let m = measure - d.S.length;
-      while (true) {
-        if (!this.loops.length || m >= this.loopsLen()) {
-          if (this.loops.length > 4000) return d.L[0][0];
-          const part = d.L[Math.floor(this.rand() * d.L.length)];
-          this.loops.push(part);
-          continue;
-        }
-        for (const part of this.loops) { if (m < part.length) return part[m]; m -= part.length; }
-      }
+    // a dance part: its one-measure clips and its cue sheet's motion cues (ddr2fx.cues: 'mot' = which clip
+    // starts at measure m, 'k1' = [clip, seconds it spans]); HP2U's sheets name the clips in order,
+    // the later dances (HP3U-HP5U) pick and repeat clips at quarter measures
+    part(kind, i) {
+      const key = kind + (i || 0);
+      if (this.parts[key]) return this.parts[key];
+      const d = this.d, clips = kind === 'L' ? d.L[i] : d[kind];
+      const sheet = d.cues && (kind === 'L' ? (d.cues.L || [])[i] : d.cues[kind]);
+      const cues = ((sheet && sheet.cues) || []).filter(c => c.mot != null && c.mot >= 0 && c.mot < clips.length).sort((x, y) => x.m - y.m);
+      const len = cues.length ? Math.max(1, Math.floor(cues[cues.length - 1].m) + 1) : clips.length;
+      const forms = (sheet && sheet.forms) || [];
+      const fcues = ((sheet && sheet.cues) || []).filter(c => c.k5 != null && c.k5 >= 0).sort((x, y) => x.m - y.m);
+      // (every row's time in seconds and its position in measures: the game runs a song's own dance on
+      // seconds - each row's 't' - and its rows change tempo, so measures and seconds are mapped row by row)
+      const rows = ((sheet && sheet.cues) || []).filter(c => c.t != null && c.m != null).sort((x, y) => x.m - y.m);
+      return (this.parts[key] = { kind, i: i || 0, clips, cues, len, forms, fcues, rows, endT: sheet && sheet.end ? sheet.end.t : null });
     }
-    loopsLen() { return this.loops.reduce((n, p) => n + p.length, 0); }
+    // the clip and its frame at measure position mp (from the part's start)
+    inPart(pt, mp) {
+      if (!pt.cues.length) {
+        const k = Math.min(pt.clips.length - 1, Math.floor(mp));
+        return { clip: pt.clips[k], f: (mp - Math.floor(mp)) * this.fpb * 4 };
+      }
+      let c = pt.cues[0];
+      for (const x of pt.cues) { if (x.m <= mp + 1e-6) c = x; else break; }
+      const span = c.k1 && c.k1[1] > 0 && c.bpm ? c.k1[1] * c.bpm / 240 : 1;   // measures the clip spans
+      const f = Math.min(this.fpb * 4 - 0.01, Math.max(0, (mp - c.m) / span) * this.fpb * 4);
+      return { clip: pt.clips[c.mot], f };
+    }
+    // beat -> {clip, f}
+    at(beat, endBeat) {
+      const b = Math.max(0, beat), mp = b / 4, measure = Math.floor(mp), endMeasure = Math.floor(endBeat / 4) + 1;
+      const d = this.d, frac = mp - measure;
+      if (measure >= endMeasure && d.E.length) {
+        const E = this.part('E');
+        const m = measure - endMeasure;
+        return m >= E.len ? this.inPart(E, E.len - 0.001) : this.inPart(E, m + frac);
+      }
+      const S = this.part('S');
+      if (measure < S.len) return this.inPart(S, measure + frac);
+      let m = measure - S.len;
+      this.reach(m);
+      for (const pt of this.loops) { if (m < pt.len) return this.inPart(pt, m + frac); m -= pt.len; }
+      return this.inPart(this.part('L', 0), 0);
+    }
+    // a part's measures <-> its seconds (its rows' (m, t) pairs; past the last row at that row's tempo)
+    partSecs(pt, m) {
+      const r = pt.rows;
+      if (!r || !r.length) return m * 240 / 120;
+      let j = 0; while (j < r.length - 1 && r[j + 1].m <= m) j++;
+      const a = r[j], b = r[j + 1];
+      if (b && b.m > a.m) return a.t + (m - a.m) * (b.t - a.t) / (b.m - a.m);
+      return a.t + (m - a.m) * 240 / (a.bpm || 120);
+    }
+    // a part's length in seconds: its closing row (ddr2fx 'end'), else its rows
+    partLen(pt) { return pt.endT != null ? pt.endT : this.partSecs(pt, pt.len); }
+    partMeasure(pt, sec) {
+      const r = pt.rows;
+      if (!r || !r.length) return sec * 120 / 240;
+      let j = 0; while (j < r.length - 1 && r[j + 1].t <= sec) j++;
+      const a = r[j], b = r[j + 1];
+      if (b && b.t > a.t) return a.m + (sec - a.t) * (b.m - a.m) / (b.t - a.t);
+      return a.m + (sec - a.t) * (a.bpm || 120) / 240;
+    }
+    // seconds since the dance started -> beats (4 a measure) along S and the loops, each part on its
+    // own seconds (Dolphin camtrace: the parts change and the camera moves cut at the rows' times)
+    beatAtSeconds(sec) {
+      let t = Math.max(0, sec), m0 = 0;
+      const S = this.part('S'), sd = this.partLen(S);
+      if (t < sd) return 4 * this.partMeasure(S, t);
+      t -= sd; m0 = S.len;
+      for (let k = 0; k < 4000; k++) {
+        if (k >= this.loops.length) this.reach(this.loopsLen());
+        const pt = this.loops[k];
+        if (!pt) break;
+        const ds = this.partLen(pt);
+        if (t < ds || ds <= 0) return 4 * (m0 + Math.min(pt.len, this.partMeasure(pt, t)));
+        t -= ds; m0 += pt.len;
+      }
+      return 4 * m0;
+    }
+    reach(m) {
+      const d = this.d;
+      while ((!this.loops.length || m >= this.loopsLen()) && this.loops.length < 4000)
+        // (the game plays the loop slots in turn: 0x80119f0c, slot = n % 3)
+        this.loops.push(this.part('L', d.lOrder === 'cycle' ? this.loops.length % d.L.length : Math.floor(this.rand() * d.L.length)));
+    }
+    // the dancers' formation at a beat (the cue column k5 picks one of the part's s1_pos files, ddr2fx.cues):
+    // {spots: {1: lead, 2..5: backups}, look} or null
+    formAt(beat, endBeat) {
+      const b = Math.max(0, beat), measure = Math.floor(b / 4), endMeasure = Math.floor(endBeat / 4) + 1;
+      const pa = this.partAt(measure, endMeasure);
+      if (!pa) return null;
+      const pt = this.part(pa.kind, pa.i), mp = b / 4 - pa.start;
+      if (!pt.forms.length) return null;
+      let k = 0;
+      for (const c of pt.fcues) { if (c.m <= mp + 1e-6) k = c.k5; else break; }
+      return pt.forms[k] || pt.forms[0];
+    }
+    clipFor(measure, endMeasure) { return this.at(measure * 4, endMeasure * 4 - 4).clip; }
+    loopsLen() { return this.loops.reduce((n, p) => n + p.len, 0); }
+    // which part is danced at a measure: {kind 'S' / 'L' / 'E', i (which L part), start (its first
+    // measure)} - for the part's cue sheet (effects and camera moves, ddr2fx.py)
+    partAt(measure, endMeasure) {
+      const d = this.d;
+      if (measure < 0) return null;
+      if (measure >= endMeasure && d.E.length) return measure - endMeasure < this.part('E').len ? { kind: 'E', i: 0, start: endMeasure } : null;
+      const S = this.part('S');
+      if (measure < S.len) return { kind: 'S', i: 0, start: 0 };
+      let m = measure - S.len, start = S.len;
+      this.reach(m);
+      const seen = {};
+      for (const pt of this.loops) {
+        // (pass: the round this loop part is in - 1 the first time through, 2 the second ...: the
+        // schedule's +288 word per segment, 0 for S and E)
+        seen[pt.i] = (seen[pt.i] || 0) + 1;
+        if (m < pt.len) return { kind: 'L', i: pt.i, start, pass: seen[pt.i] };
+        m -= pt.len; start += pt.len;
+      }
+      return null;
+    }
     // beat -> {rot: {bone: q}, hips: [x,y,z]}
     local(beat, endBeat) {
-      const fpm = this.fpb * 4;
-      const b = Math.max(0, beat);
-      const measure = Math.floor(b / 4), endMeasure = Math.floor(endBeat / 4) + 1;
-      let f = (b - measure * 4) * this.fpb;
-      if (measure >= endMeasure + this.d.E.length) f = fpm - 1;
-      const clip = this.clipFor(measure, endMeasure);
+      const { clip, f } = this.at(beat, endBeat);
       const rot = {};
       for (const bn of ORDER) {
         const tr = clip[bn];
@@ -224,7 +324,28 @@
       out.p.Hips = Q.rot(r.yaw, hipsAt);
       return out;
     }
-    pose(beat, endBeat) { return this.solve(this.local(beat, endBeat)); }
+    pose(beat, endBeat) { const p = this.solve(this.local(beat, endBeat)); p.raw = this.raw(beat, endBeat); p.ref = this.ref; return p; }
+    // a clip's own values at frame f, placed where the file puts them (no turning to the camera):
+    // the boss stage's opening flight (the S part's last clip, 600 frames, played over the 10 s opening)
+    rawClip(clip, f) {
+      const out = {};
+      for (const bn in clip) {
+        const tr = clip[bn];
+        out[bn] = { r: tr.r ? sampleTrack(tr.r, 5, f) : null, p: tr.p && tr.p.length > 4 || bn === 'Hips' ? sampleTrack(tr.p || [], 4, f) : null };
+      }
+      return out;
+    }
+    // the dance file's own values for every bone in the clip: {bone: {r: local rotation, p: local
+    // translation (if the file has one)}} - DDR II's dance files are made for its dancers' skeleton
+    // (same bone names, the same bone offsets), so these drive the model directly
+    raw(beat, endBeat) {
+      const { clip, f } = this.at(beat, endBeat), out = {};
+      for (const bn in clip) {
+        const tr = clip[bn];
+        out[bn] = { r: tr.r ? sampleTrack(tr.r, 5, f) : null, p: tr.p && tr.p.length > 4 || bn === 'Hips' ? sampleTrack(tr.p || [], 4, f) : null };
+      }
+      return out;
+    }
   }
 
   // ------------------------------------------------------------------ GL
@@ -243,25 +364,44 @@ void main() {
 precision mediump float;
 varying vec3 vN; varying vec2 vUV; varying vec3 vP;
 uniform vec4 uColor; uniform sampler2D uTex; uniform float uHasTex; uniform float uGlow; uniform float uCut; uniform vec3 uEye;
+uniform float uSil; uniform sampler2D uSilTex; uniform vec2 uRes; uniform float uFade; uniform vec3 uTint;
+uniform float uMode; uniform sampler2D uRamp; uniform vec3 uAmbG; uniform vec3 uLdir;
 void main() {
   vec4 c = uColor;
   if (uHasTex > 0.5) c *= texture2D(uTex, vUV);
   if (c.a < uCut) discard;
+  if (uSil > 0.5) {
+    // a backup silhouette: the stage's moving bubble picture (STG_SILHOUETTE) laid over the screen
+    // (one picture over the whole screen: the big flame / bubble shapes seen in the Wii footage)
+    vec2 s = gl_FragCoord.xy / uRes;
+    gl_FragColor = vec4(texture2D(uSilTex, vec2(s.x, 1.0 - s.y)).rgb * 1.1, 0.9 * uFade);
+    return;
+  }
   vec3 n = normalize(vN);
   vec3 L1 = normalize(vec3(0.4, 0.9, 0.7)), L2 = normalize(vec3(-0.7, 0.2, -0.4));
   float d = max(dot(n, L1), 0.0) * 0.75 + max(dot(n, L2), 0.0) * 0.25;
   vec3 v = normalize(uEye - vP);
   float rim = pow(1.0 - max(dot(n, v), 0.0), 3.0);
-  vec3 col = c.rgb * (0.38 + d) + vec3(0.45, 0.8, 1.0) * rim * 0.35;
+  vec3 col;
+  if (uMode < 0.5) {
+    // mode 0 (DDR II PC): two fixed lights, a flat ambient and a blue rim (our own choices)
+    col = c.rgb * (0.38 * uTint + d) + vec3(0.45, 0.8, 1.0) * rim * 0.35;
+  } else {
+    // mode 1 (GAME STYLE, DDR II PC's own dancer only; DDR2_SPEC.md): the game's two layers -
+    // texture x material x the stage's ambient colour (the light show swaps it), plus the
+    // CHR_SHADER ramp looked up by how squarely the surface faces the light from the camera
+    float nl = clamp(dot(n, normalize(uLdir)), 0.0, 1.0);
+    col = c.rgb * uAmbG + texture2D(uRamp, vec2(nl, nl)).rgb;
+  }
   col = mix(col, c.rgb * 1.25, uGlow);
-  gl_FragColor = vec4(col, c.a);
+  gl_FragColor = vec4(col, c.a * uFade);
 }`;
 
   class Renderer {
     constructor(w, h) {
       this.canvas = document.createElement('canvas');
       this.canvas.width = w; this.canvas.height = h;
-      const gl = this.gl = this.canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false, preserveDrawingBuffer: true, antialias: true });
+      const gl = this.gl = this.canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false, preserveDrawingBuffer: !(typeof S !== 'undefined' && S.glFast), antialias: true });
       if (!gl) throw new Error('WebGL is not available');
       this.maxJ = Math.max(8, Math.min(200, Math.floor((gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS) - 24) / 4)));
       const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
@@ -272,7 +412,7 @@ void main() {
       if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
       gl.useProgram(p);
       this.a = {}; for (const n of ['aPos', 'aNrm', 'aUV', 'aJ', 'aW']) this.a[n] = gl.getAttribLocation(p, n);
-      this.u = {}; for (const n of ['uVP', 'uModel', 'uJ', 'uSkin', 'uColor', 'uTex', 'uHasTex', 'uGlow', 'uCut', 'uEye']) this.u[n] = gl.getUniformLocation(p, n);
+      this.u = {}; for (const n of ['uVP', 'uModel', 'uJ', 'uSkin', 'uColor', 'uTex', 'uHasTex', 'uGlow', 'uCut', 'uEye', 'uSil', 'uSilTex', 'uRes', 'uFade', 'uTint', 'uMode', 'uRamp', 'uAmbG', 'uLdir']) this.u[n] = gl.getUniformLocation(p, n);
       gl.enable(gl.DEPTH_TEST);
       this.white = this.texture(null);
     }
@@ -302,6 +442,17 @@ void main() {
       gl.uniformMatrix4fv(this.u.uVP, false, this.vp);
       gl.uniform3fv(this.u.uEye, eye);
     }
+    // draw with someone else's camera (the DDR II stage's), at its size
+    beginView(view) {
+      const gl = this.gl;
+      if (this.canvas.width !== view.w || this.canvas.height !== view.h) { this.canvas.width = view.w; this.canvas.height = view.h; }
+      gl.viewport(0, 0, view.w, view.h);
+      gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      this.vp = new Float32Array(view.VP);
+      gl.useProgram(this.prog);
+      gl.uniformMatrix4fv(this.u.uVP, false, this.vp);
+      gl.uniform3fv(this.u.uEye, view.eye);
+    }
     // mesh: {pos, nrm, uv?, j?, w?, idx (Uint16/32), count, type}
     draw(mesh, model, mat, joints) {
       const gl = this.gl, a = this.a;
@@ -322,8 +473,22 @@ void main() {
       gl.uniform1f(this.u.uCut, mat.cut === undefined ? 0.02 : mat.cut);
       gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, mat.tex || this.white);
       gl.uniform1i(this.u.uTex, 0); gl.uniform1f(this.u.uHasTex, mat.tex ? 1 : 0);
-      if (mat.blend) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); } else gl.disable(gl.BLEND);
-      if (mat.doubleSided) gl.disable(gl.CULL_FACE); else { gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); }
+      gl.uniform1f(this.u.uSil, this.silTex ? 1 : 0);
+      gl.uniform1f(this.u.uFade, this.fade == null ? 1 : this.fade);
+      gl.uniform3fv(this.u.uTint, this.tint || [1, 1, 1]);
+      const gm = this.mode === 1 && this.ramp && this.ambG && this.ldir;
+      gl.uniform1f(this.u.uMode, gm ? 1 : 0);
+      if (gm) {
+        gl.uniform3fv(this.u.uAmbG, this.ambG); gl.uniform3fv(this.u.uLdir, this.ldir);
+        gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.ramp); gl.uniform1i(this.u.uRamp, 2);
+        gl.activeTexture(gl.TEXTURE0);
+      }
+      if (this.silTex) {
+        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.silTex); gl.uniform1i(this.u.uSilTex, 1);
+        gl.uniform2f(this.u.uRes, this.canvas.width, this.canvas.height); gl.activeTexture(gl.TEXTURE0);
+      }
+      if (mat.blend || this.silTex || this.fade != null) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); } else gl.disable(gl.BLEND);
+      if (mat.doubleSided || this.fade != null) gl.disable(gl.CULL_FACE); else { gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); }
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.idx);
       gl.drawElements(gl.TRIANGLES, mesh.count, mesh.type || gl.UNSIGNED_SHORT, 0);
     }
@@ -631,9 +796,54 @@ void main() {
       locals[hi] = { t: M.pos(lp), r: locals[hi].r, s: locals[hi].s };
       return this.world(locals);
     }
-    draw(pose, scale, offX) {
-      const R = this.R, g = this.g, W = this.retarget(pose);
-      const root = M.mul(M.trs([offX, 0, 0], Q.id(), [scale * this.scale, scale * this.scale, scale * this.scale]), M.id());
+    // the dance applied straight to the skeleton: each named bone takes the file's local rotation (and
+    // translation, for the hips), every other bone keeps its own rest values. stage: true = in DDR II's
+    // stage (the game's own units and places); otherwise kept near the middle of the dancer panel
+    direct(raw, stage, ref) {
+      const g = this.g;
+      if (!this.byName) { this.byName = {}; g.nodes.forEach((n, i) => { this.byName[n.name] = i; }); }
+      const locals = g.nodes.map(n => ({ t: n.t, r: n.r, s: n.s }));
+      for (const bn in raw) {
+        const i = this.byName[bn]; if (i === undefined) continue;
+        const v = raw[bn];
+        locals[i] = { t: v.p || g.nodes[i].t, r: v.r ? Q.norm(v.r) : g.nodes[i].r, s: g.nodes[i].s };
+      }
+      // the hips: their height as in the file; moves across the floor kept near the dancer's spot (as
+      // before - where the game puts the dancer on its stage isn't read yet)
+      const hi = this.byName.Hips;
+      if (hi !== undefined && raw.Hips && raw.Hips.p && ref) {
+        const lim = (v, m) => m * Math.tanh(v / m), p = raw.Hips.p;
+        locals[hi] = Object.assign({}, locals[hi], { t: [ref.hx + lim((p[0] - ref.hx) * 0.35, 2.2), p[1], ref.hz + lim((p[2] - ref.hz) * 0.35, 2.5)] });
+      }
+      const W = this.world(locals);
+      if (!ref) return W;
+      // the dance keeps the file's own facing (the game turns nobody: the boss flight's head points +z,
+      // towards the camera, in the file and in the real game, and a standing dance's toes point +z, to the
+      // camera). The old turn 'to face the camera' (ref.yaw, worked out for the stick-figure skeleton)
+      // turned the game's dancers round - on the stage and in the dancer panel (lessons) alike.
+      const T = M.trs([-ref.hx, 0, -ref.hz], Q.id());
+      return W.map(m => M.mul(T, m));
+    }
+    isDirect(raw) {
+      if (this.directOk === undefined && raw) {
+        const names = Object.keys(raw), have = new Set(this.g.nodes.map(n => n.name));
+        this.directOk = names.length > 8 && names.filter(n => have.has(n)).length >= names.length * 0.9;
+      }
+      return !!this.directOk;
+    }
+    draw(pose, scale, offX, stage, offZ = 0, offY = 0, mirror = false) {
+      const R = this.R, g = this.g, direct = this.isDirect(pose.raw);
+      const W = direct ? this.direct(pose.raw, stage, pose.ref) : this.retarget(pose);
+      const k = direct ? scale * this.scale * (stage ? 1 / this.scale : 1) : scale * this.scale;
+      const root = M.mul(mirror ? M.trs([0, 0, 0], Q.id(), [1, -1, 1]) : M.id(), M.trs([offX, offY, offZ], Q.id(), [k, k, k]));
+      // (where its effect bones are, for the stage's character effects - the boss dancers' sparkles)
+      if (!mirror && this.byName) {
+        this.lastBones = {};
+        for (const bn of ['Hips', 'LeftHand', 'RightHand', 'LeftFoot', 'RightFoot']) {
+          const i = this.byName[bn];
+          if (i !== undefined && W[i]) this.lastBones[bn] = M.mul(root, W[i]);
+        }
+      }
       for (const i of g.order) {
         const n = g.nodes[i];
         if (n.mesh === undefined) continue;
@@ -655,6 +865,9 @@ void main() {
   // ------------------------------------------------------------------ public
   const Dancer = {
     R: null, built: null, custom: null, customErr: '', customFor: null,
+    createPreview() {
+      return Object.assign({}, this, { R: null, built: null, builtFor: null, custom: null, customFor: null, extras: [], sil: null });
+    },
     ensure() {
       if (!this.R) this.R = new Renderer(560, 720);
       return this.R;
@@ -682,11 +895,127 @@ void main() {
     // render one frame; returns the canvas to drawImage, or null
     render(ch, beat, endBeat, opts = {}) {
       if (!ch || !this.R) return null;
-      const R = this.R, pose = ch.pose(beat, endBeat);
-      R.begin(9.5, 40, 8.2);
+      const R = this.R;
+      // Shared GAME STYLE lighting for all dancers, when chosen and on a
+      // DDR II stage (it needs the stage's ambient colour and the camera's light direction)
+      const game = opts.lightMode === 'game' && opts.ambG && opts.view && opts.view.lightDir;
+      if (game && !R.ramp && !R.rampLoading) {
+        R.rampLoading = true;
+        fetch('/api/ddr2shader').then(r => r.ok ? r.blob() : null).then(b => b && createImageBitmap(b))
+          .then(img => { if (img) { R.ramp = R.texture(img); const gl = R.gl; gl.bindTexture(gl.TEXTURE_2D, R.ramp);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); } })
+          .catch(() => {});
+      }
+      R.mode = game ? 1 : 0; R.ambG = game ? opts.ambG : null; R.ldir = game ? opts.view.lightDir : null;
+      if (opts.intro && opts.view && this.custom) {
+        // the boss stage's opening: all three dancers play the opening clip where the file puts them,
+        // the backups at the dance's first formation (spots 2 and 3 beside the lead's spot 1)
+        const pose = { raw: ch.rawClip(opts.intro.clip, opts.intro.f), ref: null };
+        R.beginView(opts.view);
+        // (Dolphin memory during the opening: the three stand at the stage origin + their spots -
+        // (0, 0, 4), (9, 0, -6), (-9, 0, -6) - and the clip moves them from there)
+        const fm = opts.intro.form, sp = k => fm && fm.spots && fm.spots[k];
+        const a = sp(1) || [0, 0, 0];
+        this.custom.draw(pose, 1, a[0], true, a[2], a[1]);
+        this.extras.forEach((x, k) => {
+          const b = sp(k + 2);
+          const o = b || [Dancer.FORMATION[k][0], 0, Dancer.FORMATION[k][1]];
+          if (x.custom) x.custom.draw(pose, 1, o[0], true, o[2], o[1]);
+        });
+        // (each dancer's bones for the character effects; the opening's places are relative to the stage)
+        this.bones = [this.custom.lastBones, ...this.extras.map(x => x.custom && x.custom.lastBones)].map(b => b || null);
+        this.bonesRef = [0, 0, 0];
+        return R.canvas;
+      }
+      const pose = ch.pose(beat, endBeat);
+      if (opts.view) R.beginView(opts.view);
+      else {
+        if (R.canvas.width !== 560 || R.canvas.height !== 720) { R.canvas.width = 560; R.canvas.height = 720; }
+        R.begin(9.5, 40, 8.2);
+      }
       const who = this.custom && !opts.builtIn ? this.custom : this.built;
-      who.draw(pose, 1, 0);
+      // where everyone stands: the dance's formation (spot 1 = the lead, 2 / 3 the backups), relative to
+      // its look point (the camera's reference, where the stage is centred - Play.draw); a formation
+      // without a spot hides that dancer
+      const fm = opts.view && !opts.builtIn && this.custom && ch.formAt ? ch.formAt(beat, endBeat) : null;
+      const ref = fm ? fm.look || (fm.spots && fm.spots[1]) || [0, 0, 0] : null;
+      const rel = b => b ? [b[0] - ref[0], b[1] - ref[1], b[2] - ref[2]] : null;
+      const lo = fm && fm.spots ? rel(fm.spots[1]) : [0, 0, 0];
+      // the combo performance: the lead plays its combo motion (GAME_APL_MOT01) - bones the clip leaves
+      // out (the break motion has 21 of the 37) keep the dance's pose; the backups dance on (0x80061c4c
+      // gives the motion to the performing player's dancer only)
+      const lp = opts.appeal && this.custom && !opts.builtIn ? Object.assign({}, pose, { raw: Object.assign({}, pose.raw, ch.rawClip(opts.appeal.clip, opts.appeal.f)) }) : pose;
+      // DDR II's floors are glossy: the dancer shows upside down in them (Dolphin footage), drawn first and faint
+      if (opts.view && !opts.builtIn && this.custom && !this.extras.length) {
+        R.fade = 0.28; R.mirror = true;
+        if (lo) this.custom.draw(lp, 1, lo[0], true, lo[2], lo[1], true);
+        R.fade = null; R.mirror = false;
+      }
+      // (the combo performance's light show tints DDR II PC's own dancer only - see Play.drawDancer)
+      R.tint = who === this.built && opts.tint ? opts.tint : null;
+      if (lo) who.draw(who === this.custom ? lp : pose, 1, lo[0], !!opts.view, lo[2], lo[1]);
+      R.tint = null;
+      // the backup dancers either side, a little behind (on the 3D stage only); they dance the same
+      // moves as the lead (the game loads one dance per song)
+      if (opts.view && !opts.builtIn && this.custom) {
+        const spotOf = k => {
+          if (!fm || !fm.spots) return [Dancer.FORMATION[k][0], 0, Dancer.FORMATION[k][1]];
+          return rel(fm.spots[k + 2]);
+        };
+        this.extras.forEach((x, k) => { const o = spotOf(k); if (x.custom && o) x.custom.draw(pose, 1, o[0], true, o[2], o[1]); });
+        // (each dancer's effect bones this frame, relative to the formation's look point)
+        this.bones = [lo && who.lastBones, ...this.extras.map((x, k) => spotOf(k) && x.custom && x.custom.lastBones)].map(b => b || null);
+        this.bonesRef = ref;
+        // normal songs: two blue silhouettes of your own dancer either side (STG_SILHOUETTE0n: 40 frames)
+        if (!this.extras.length && this.sil && this.sil.frames.length) {
+          const fr = this.sil.frames[Math.floor((opts.secs || 0) * 30) % this.sil.frames.length];
+          // (they fade in over 2 s once the song starts and then stay: 0x8011412c starts the
+          // silhouette object's fade, 2.0 s, which 0x800fb6f8 runs up every frame)
+          const a = Math.max(0, Math.min(1, (opts.secs || 0) / 2));
+          if (a <= 0) { R.silTex = null; return R.canvas; }
+          R.silTex = fr; R.fade = a < 1 ? a : null;
+          [0, 1].forEach(k => {
+            const o = fm && fm.spots && fm.spots[1] ? spotOf(k) : [Dancer.SIL_SPOTS[k][0], 0, Dancer.SIL_SPOTS[k][1]];
+            if (o) this.custom.draw(pose, 1, o[0], true, o[2], o[1]);
+          });
+          R.silTex = null; R.fade = null;
+        }
+      }
       return R.canvas;
+    },
+    // backup dancers: a list of .glb urls (DDR II's own dancers, ddr2char.py)
+    extras: [], FORMATION: [[-8, -4], [8, -4]], SIL_SPOTS: [[-12, -8], [12, -8]], SIL_LAG: [0, 0], sil: null,
+    // the silhouettes' moving picture: n = 1..3 (stage/STG_SILHOUETTE0n.tpl), 0 = none
+    async useSilhouette(n) {
+      if (!n) { this.sil = null; return; }
+      if (this.sil && this.sil.n === n) return;
+      const R = this.ensure(), gl = R.gl, sil = { n, frames: [] };
+      this.sil = sil;
+      for (let i = 0; i < 40; i++) {
+        try {
+          const blob = await (await fetch('/api/ddr2sil/' + n + '/' + i)).blob();
+          const img = await createImageBitmap(blob);
+          const t = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, t);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+          sil.frames.push(t);
+        } catch (e) { break; }
+      }
+    },
+    async useExtras(urls) {
+      const key = (urls || []).join('|');
+      if (this.extrasFor === key) return;
+      this.extrasFor = key; this.extras = [];
+      const R = this.ensure(), out = [];
+      for (const url of urls || []) {
+        try {
+          const g = await loadGLTF(R, await (await fetch(url)).arrayBuffer(), async u => (await fetch(url.replace(/[^/]*$/, '') + u)).arrayBuffer());
+          out.push({ url, custom: new Custom(R, g) });
+        } catch (e) { console.error('backup dancer', url, e); }
+      }
+      if (this.extrasFor === key) this.extras = out;
     },
     _test: { Q, V, M, mapBones, normName, Choreo, ORDER, PARENT },
   };
